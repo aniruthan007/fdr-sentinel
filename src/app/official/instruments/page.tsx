@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { FileStack, Landmark, TriangleAlert, CalendarClock } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { MoneyText } from "@/components/money-text";
@@ -10,7 +11,17 @@ import { instrumentColumns } from "@/components/tables/columns";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { useDemoData, useToday } from "@/store/hooks";
 
+/** Supports ?q= deep links from the ⌘K palette. */
 export default function InstrumentsPage() {
+  return (
+    <Suspense>
+      <InstrumentsPageInner />
+    </Suspense>
+  );
+}
+
+function InstrumentsPageInner() {
+  const q = useSearchParams().get("q") ?? "";
   const d = useDemoData();
   const today = useToday();
   const columns = useMemo(() => instrumentColumns(d, today, { institution: true }), [d, today]);
@@ -28,7 +39,7 @@ export default function InstrumentsPage() {
         </>
       }
     >
-      <DataTable columns={columns} data={d.instruments} searchPlaceholder="Search instrument, bank or institution" initialSorting={[{ id: "maturity", desc: false }]} />
+      <DataTable key={q} initialFilter={q} columns={columns} data={d.instruments} searchPlaceholder="Search instrument, bank or institution" initialSorting={[{ id: "maturity", desc: false }]} />
     </PortalPage>
   );
 }

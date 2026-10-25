@@ -32,7 +32,7 @@ export function ResetDemoButton() {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
+        <Button variant="outline" size="sm" className="gap-1.5" aria-label="Reset demo">
           <RotateCcw className="size-3.5" />
           <span className="hidden md:inline">Reset demo</span>
         </Button>

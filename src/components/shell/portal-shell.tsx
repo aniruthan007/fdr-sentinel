@@ -14,6 +14,7 @@ import type { Portal } from "@/types";
 import { AppSidebar } from "./app-sidebar";
 import { Breadcrumbs } from "./breadcrumbs";
 import { ResetDemoButton } from "./reset-demo-button";
+import { CommandPalette } from "./command-palette";
 import { RoleSwitcher } from "./role-switcher";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -64,13 +65,14 @@ export function PortalShell({ portal, children }: { portal: Portal; children: Re
           <Breadcrumbs />
 
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            <CommandPalette />
             <RoleSwitcher />
             <ResetDemoButton />
             <ThemeToggle />
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
           <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
           {permitted ? (
             children

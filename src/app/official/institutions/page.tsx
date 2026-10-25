@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Building2, CircleDollarSign, MapPin, ShieldCheck } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { MoneyText } from "@/components/money-text";
@@ -9,7 +10,17 @@ import { StatCard } from "@/components/stat-card";
 import { institutionColumns } from "@/components/tables/columns";
 import { useDemoData } from "@/store/hooks";
 
+/** Supports ?q= deep links from the ⌘K palette. */
 export default function InstitutionsPage() {
+  return (
+    <Suspense>
+      <InstitutionsPageInner />
+    </Suspense>
+  );
+}
+
+function InstitutionsPageInner() {
+  const q = useSearchParams().get("q") ?? "";
   const d = useDemoData();
   const columns = useMemo(() => institutionColumns(d), [d]);
   const required = d.obligations.filter((o) => o.status !== "discharged").reduce((s, o) => s + o.requiredPaise, 0);
@@ -26,7 +37,7 @@ export default function InstitutionsPage() {
         </>
       }
     >
-      <DataTable columns={columns} data={d.institutions} searchPlaceholder="Search institution or reference" />
+      <DataTable key={q} initialFilter={q} columns={columns} data={d.institutions} searchPlaceholder="Search institution or reference" />
     </PortalPage>
   );
 }

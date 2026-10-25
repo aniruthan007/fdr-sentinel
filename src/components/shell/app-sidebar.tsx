@@ -19,6 +19,14 @@ export function AppSidebar({ portal, onNavigate }: { portal: Portal; onNavigate?
   const groups = [...new Set(items.map((i) => i.group))];
   const institution = session.institutionId ? data.institutions.find((i) => i.id === session.institutionId) : undefined;
   const root = portal === "institution" ? "/institution" : "/official";
+  // Same audience rules as the notifications pages.
+  const unread = data.notifications.filter(
+    (n) =>
+      !n.readAt &&
+      (portal === "institution"
+        ? n.institutionId === session.institutionId
+        : n.recipientRole !== null && (n.recipientRole === session.role || session.role === "auditor" || session.role === "supervisor")),
+  ).length;
 
   return (
     <div className="flex h-full flex-col">
@@ -59,6 +67,11 @@ export function AppSidebar({ portal, onNavigate }: { portal: Portal; onNavigate?
                       >
                         <item.icon className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} aria-hidden />
                         {item.label}
+                        {item.href.endsWith("/notifications") && unread > 0 && (
+                          <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground tabular" aria-label={`${unread} unread`}>
+                            {unread}
+                          </span>
+                        )}
                       </Link>
                     </li>
                   );

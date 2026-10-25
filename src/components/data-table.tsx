@@ -24,6 +24,8 @@ interface DataTableProps<T> {
   /** Shows a search box that filters across every column's accessor value. */
   searchPlaceholder?: string;
   initialSorting?: SortingState;
+  /** Pre-fills the search box, e.g. from a ?q= deep link. */
+  initialFilter?: string;
   pageSize?: number;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -36,6 +38,7 @@ export function DataTable<T>({
   data,
   searchPlaceholder,
   initialSorting = [],
+  initialFilter = "",
   pageSize = 10,
   emptyTitle = "Nothing here yet",
   emptyDescription,
@@ -43,7 +46,7 @@ export function DataTable<T>({
   className,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [globalFilter, setGlobalFilter] = useState(initialFilter);
 
   const table = useReactTable({
     data,

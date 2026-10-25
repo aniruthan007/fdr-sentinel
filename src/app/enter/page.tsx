@@ -73,7 +73,7 @@ export default function EnterPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <main id="main" tabIndex={-1} className="h-full overflow-y-auto outline-none">
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-16">
         <div className="mb-10 space-y-4">
           <Brand />
@@ -136,6 +136,6 @@ export default function EnterPage() {
           banks, people and FDR numbers are fictional.
         </p>
       </div>
-    </div>
+    </main>
   );
 }

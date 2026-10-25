@@ -13,7 +13,7 @@ export default function Home() {
   return (
     <div className="h-full overflow-y-auto motion-safe:scroll-smooth">
       <SiteNav />
-      <main>
+      <main id="main" tabIndex={-1} className="outline-none">
         <Hero />
         <Problem />
         <HowItWorks />

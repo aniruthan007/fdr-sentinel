@@ -1,17 +1,22 @@
 "use client";
 
 import { useMemo } from "react";
-import { Percent, Landmark, Timer, Undo2 } from "lucide-react";
+import { Download, Percent, Landmark, Timer, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table";
 import { MoneyText } from "@/components/money-text";
 import { PortalPage, Section } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
 import { institutionColumns } from "@/components/tables/columns";
+import { downloadCsv, toCsv } from "@/lib/csv";
+import { todayIST } from "@/lib/dates";
 import { isReleaseApproved } from "@/lib/selectors";
-import { useDemoData } from "@/store/hooks";
+import { instrumentDisplayStatus, STATUS_META } from "@/lib/status";
+import { useDemoData, useToday } from "@/store/hooks";
 
 export default function ReportsPage() {
   const d = useDemoData();
+  const today = useToday();
   const columns = useMemo(() => institutionColumns(d), [d]);
   const required = d.obligations.filter((o) => o.status !== "discharged").reduce((s, o) => s + o.requiredPaise, 0);
   const covered = d.instruments.filter((i) => i.status === "active").reduce((s, i) => s + i.amountPaise, 0);
@@ -20,10 +25,55 @@ export default function ReportsPage() {
   const avgDays = released.length
     ? Math.round(released.reduce((s, r) => s + (Date.parse(r.decidedAt!) - Date.parse(r.submittedAt)) / 86_400_000, 0) / released.length)
     : null;
+  const inst = (id: string) => d.institutions.find((i) => i.id === id);
+
+  function exportInstruments() {
+    const rows = d.instruments.map((i) => ({
+      institution: inst(i.institutionId)?.name ?? "",
+      institution_ref: inst(i.institutionId)?.refCode ?? "",
+      type: i.type,
+      instrument_no: i.instrumentNo,
+      bank: i.bankName,
+      amount_inr: (i.amountPaise / 100).toFixed(2),
+      issue_date: i.issueDate,
+      maturity_date: i.maturityDate,
+      status: STATUS_META[instrumentDisplayStatus(i, today)].label,
+      predecessor: d.instruments.find((p) => p.id === i.predecessorInstrumentId)?.instrumentNo ?? "",
+    }));
+    downloadCsv(`fdr-sentinel-instruments-${todayIST()}.csv`, toCsv(rows));
+  }
+
+  function exportReleases() {
+    const rows = d.releaseRequests.map((r) => {
+      const c = d.cases.find((x) => x.id === r.caseId);
+      return {
+        request: r.ref,
+        institution: inst(r.institutionId)?.name ?? "",
+        amount_inr: (r.totalPaise / 100).toFixed(2),
+        status: STATUS_META[r.status].label,
+        submitted_at: r.submittedAt,
+        decision: c?.decision?.outcome ?? "",
+        decision_reference: c?.decision?.referenceNo ?? "",
+        decided_at: r.decidedAt,
+        clearances_recorded: `${d.clearances.filter((x) => x.releaseRequestId === r.id && ["cleared", "not_applicable"].includes(x.status)).length}/${d.clearances.filter((x) => x.releaseRequestId === r.id).length}`,
+      };
+    });
+    downloadCsv(`fdr-sentinel-release-requests-${todayIST()}.csv`, toCsv(rows));
+  }
 
   return (
     <PortalPage
       href="/official/reports"
+      actions={
+        <>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={exportInstruments}>
+            <Download className="size-3.5" /> Instruments CSV
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={exportReleases}>
+            <Download className="size-3.5" /> Release requests CSV
+          </Button>
+        </>
+      }
       stats={
         <>
           <StatCard label="Coverage" value={`${coverage}%`} hint="Active cover ÷ required" icon={Percent} />
