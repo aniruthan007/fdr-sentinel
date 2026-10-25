@@ -3,10 +3,10 @@ import type { ClearanceDepartment, ClearanceRecord, ReleaseRequest, RenewalRepla
 import type { SeedContext } from "./context";
 
 export const CLEARANCE_DEPARTMENT_LABELS: Record<ClearanceDepartment, string> = {
-  accounts: "Accounts (no dues)",
+  pgrc: "PGRC",
+  vigilance_cell: "Vigilance Cell",
   approval_bureau: "Approval Bureau",
-  grievance_cell: "Grievance Cell",
-  vigilance: "Vigilance",
+  finance: "Finance",
 };
 
 export const CLEARANCE_DEPARTMENTS = Object.keys(CLEARANCE_DEPARTMENT_LABELS) as ClearanceDepartment[];
@@ -47,14 +47,14 @@ export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
 type ClearanceRow = [rr: string, dept: ClearanceDepartment, status: ClearanceRecord["status"], remarks: string | null, offset: number | null];
 
 const CLEARANCES: ClearanceRow[] = [
-  ["rr-01", "accounts", "cleared", "No outstanding dues on record.", -9],
-  ["rr-01", "approval_bureau", "cleared", "Programme closure recorded for AY 2026-27.", -8],
-  ["rr-01", "grievance_cell", "pending", null, null],
-  ["rr-01", "vigilance", "pending", null, null],
-  ["rr-02", "accounts", "cleared", "No outstanding dues on record.", -55],
-  ["rr-02", "approval_bureau", "cleared", "Closure approved.", -52],
-  ["rr-02", "grievance_cell", "cleared", "No open grievances.", -48],
-  ["rr-02", "vigilance", "cleared", "Nothing adverse on record.", -41],
+  ["rr-01", "finance", "cleared", "No outstanding dues on record.", -9],
+  ["rr-01", "approval_bureau", "cleared", "NOC issued: programme closure recorded for AY 2026-27.", -8],
+  ["rr-01", "pgrc", "pending", null, null],
+  ["rr-01", "vigilance_cell", "pending", null, null],
+  ["rr-02", "finance", "cleared", "No outstanding dues on record.", -55],
+  ["rr-02", "approval_bureau", "cleared", "NOC issued: closure approved.", -52],
+  ["rr-02", "pgrc", "cleared", "No open grievances.", -48],
+  ["rr-02", "vigilance_cell", "cleared", "Nothing adverse on record.", -41],
 ];
 
 export function buildClearances(ctx: SeedContext): ClearanceRecord[] {

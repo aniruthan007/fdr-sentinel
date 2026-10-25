@@ -10,7 +10,7 @@ import {
 
 /**
  * Role → permitted actions. The single source of truth for the demo layer.
- * In production the same matrix is enforced in Server Actions and mirrored by Postgres RLS.
+ * In the production target the same matrix is enforced server-side and mirrored by Postgres RLS.
  * Brief §2.1 is the authority; open items are logged in docs/open-questions.md.
  */
 const MATRIX: Record<Action, readonly Role[]> = {

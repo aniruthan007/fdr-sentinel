@@ -35,9 +35,9 @@ export const EXTRACTION_FIELD_LABELS: Record<ExtractionField, string> = {
 
 export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   fdr_receipt: "FDR / instrument receipt",
-  affidavit: "Affidavit",
-  letter_of_approval: "Letter of Approval",
-  release_application: "Release application",
+  affidavit: "Affidavit 6",
+  letter_of_approval: "LoA / EoA",
+  release_application: "Release request letter",
   bank_confirmation: "Bank lien confirmation",
 };
 
@@ -67,11 +67,14 @@ const SUPPORTING: ExtraDoc[] = [
   ["doc-kit-loa", "inst-kit", null, null, "letter_of_approval", "KIT-LoA-2026-27.pdf", 3, -40],
   ["doc-kit-aff", "inst-kit", "fdr-kit-05", "vc-01", "affidavit", "KIT-Affidavit-intake-2026.pdf", 2, -6],
   ["doc-kit-rel", "inst-kit", "fdr-kit-06", "vc-05", "release_application", "KIT-Release-MTech-SE.pdf", 2, -12],
+  ["doc-kit-aff6-rel", "inst-kit", "fdr-kit-06", "vc-05", "affidavit", "KIT-Affidavit-6-release.pdf", 2, -12],
   ["doc-wgce-aff", "inst-wgce", "fdr-wgce-01", "vc-02", "affidavit", "WGCE-Affidavit-2026.pdf", 2, -9],
   ["doc-wgce-loa", "inst-wgce", null, null, "letter_of_approval", "WGCE-LoA-2026-27.pdf", 3, -45],
   ["doc-dpip-loa", "inst-dpip", null, "vc-03", "letter_of_approval", "DPIP-LoA-2026-27.pdf", 3, -4],
   ["doc-hit-aff", "inst-hit", "fdr-hit-03", "vc-04", "affidavit", "HIT-Affidavit-intake.pdf", 2, -1],
   ["doc-ysm-rel", "inst-ysm", "fdr-ysm-01", "vc-06", "release_application", "YSM-Release-PGDM-Evening.pdf", 2, -70],
+  ["doc-ysm-aff6", "inst-ysm", "fdr-ysm-01", "vc-06", "affidavit", "YSM-Affidavit-6-release.pdf", 2, -70],
+  ["doc-ysm-loa", "inst-ysm", null, "vc-06", "letter_of_approval", "YSM-EoA-2025-26.pdf", 3, -70],
   ["doc-kit-bank", "inst-kit", "fdr-kit-03", "vc-07", "bank_confirmation", "DMB-Lien-Confirmation-341177.pdf", 1, -364],
 ];
 

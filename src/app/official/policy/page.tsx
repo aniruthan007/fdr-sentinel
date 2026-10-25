@@ -9,7 +9,7 @@ import { IdText } from "@/components/id-text";
 import { PortalPage, Section } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
 import { useDemoData } from "@/store/hooks";
-import type { ChecklistKind, ChecklistRequirement, PolicyRule } from "@/types";
+import type { ChecklistKind, ChecklistRequirement, PolicyRule, Provenance as ProvenanceValue } from "@/types";
 
 const CHECKLIST_LABELS: Record<ChecklistKind, string> = {
   annexure_1: "Annexure-1 · Deposit verification",
@@ -17,10 +17,16 @@ const CHECKLIST_LABELS: Record<ChecklistKind, string> = {
   clause_6_46: "Clause 6.46 · Release",
 };
 
-function Provenance({ value }: { value: "demo_config" | "verified" }) {
-  return value === "verified" ? (
-    <span className="text-xs text-status-success">Verified</span>
-  ) : (
+function Provenance({ value }: { value: ProvenanceValue }) {
+  if (value === "verified") return <span className="text-xs text-status-success">Verified</span>;
+  if (value === "brief") {
+    return (
+      <span className="rounded border border-status-info-border px-1.5 py-0.5 text-[11px] font-medium text-status-info" title="Item taken from the project brief; handbook page not yet linked">
+        FROM BRIEF
+      </span>
+    );
+  }
+  return (
     <span className="rounded border border-dashed border-status-warning-border px-1.5 py-0.5 text-[11px] font-medium text-status-warning" title="Placeholder pending verification against the handbook">
       DEMO CONFIG
     </span>

@@ -26,6 +26,7 @@ import type {
   AuditPayload,
   CaseType,
   ChecklistKind,
+  ClearanceDepartment,
   ClearanceStatus,
   DocumentKind,
   EntityType,
@@ -86,7 +87,9 @@ export interface RecordClearanceInput {
 export interface RecordDecisionInput {
   caseId: string;
   decision: "approved" | "rejected";
-  remarks: string;
+  reason: string;
+  /** Office reference for the decision, e.g. DC/REL/2026/0027. Required. */
+  referenceNo: string;
 }
 export interface RenewInstrumentInput {
   predecessorId: string;
@@ -194,6 +197,7 @@ function openCase(d: DemoData, type: CaseType, title: string, institutionId: str
     openedAt: now,
     updatedAt: now,
     dueDate: null,
+    decision: null,
     version: 1,
   };
   d.cases.push(c);
@@ -441,10 +445,11 @@ export const useDemoStore = create<DemoState>()(
               clr.recordedBy = s.userId;
               clr.recordedAt = now;
 
-              // Tick the Clause 6.46 checklist item this department evidences.
+              // Tick the Clause 6.46 item the clearances evidence: 6.46-05 (PGRC, Vigilance and other
+              // clearances) and 6.46-06 (Approval Bureau NOC).
               const all = d.clearances.filter((x) => x.releaseRequestId === rr.id);
               const done = (deps: string[]) => all.filter((x) => deps.includes(x.department)).every((x) => x.status === "cleared" || x.status === "not_applicable");
-              const reqFor: Record<string, string[]> = { "req-646-03": ["accounts", "approval_bureau"], "req-646-04": ["grievance_cell"], "req-646-05": ["vigilance"] };
+              const reqFor: Record<string, ClearanceDepartment[]> = { "req-646-05": ["pgrc", "vigilance_cell", "finance"], "req-646-06": ["approval_bureau"] };
               for (const item of d.checklistItems.filter((i) => i.caseId === rr.caseId && reqFor[i.requirementId])) {
                 if (item.status === "pending" && done(reqFor[item.requirementId])) {
                   item.status = "satisfied";
@@ -475,10 +480,14 @@ export const useDemoStore = create<DemoState>()(
             (d) => d.cases.find((c) => c.id === input.caseId)?.institutionId,
             (d, now, s) => {
               const c = must(d.cases.find((x) => x.id === input.caseId), "Case");
-              if (!input.remarks.trim()) throw new CommandError("Decision remarks are required");
+              const reason = input.reason.trim();
+              const referenceNo = input.referenceNo.trim();
+              if (!reason) throw new CommandError("A reason is required for every decision");
+              if (!referenceNo) throw new CommandError("A reference number is required for every decision");
               const blocking = d.findings.filter((f) => f.caseId === c.id && f.status !== "resolved" && f.severity === "critical");
               if (input.decision === "approved" && blocking.length > 0) throw new CommandError(`${blocking.length} critical finding(s) are unresolved`);
               moveCase(d, c, input.decision, "recordDecision", s.userId, now);
+              c.decision = { outcome: input.decision, reason, referenceNo, decidedBy: s.userId, decidedAt: now };
               const insts = d.instruments.filter((i) => c.instrumentIds.includes(i.id));
 
               if (c.type === "release") {
@@ -512,8 +521,8 @@ export const useDemoStore = create<DemoState>()(
                 }
               }
               for (const obId of new Set(insts.map((i) => i.obligationId))) refreshObligation(d, obId);
-              notify(d, { recipientRole: null, institutionId: c.institutionId, severity: input.decision === "approved" ? "success" : "critical", title: `${c.ref} ${input.decision}`, body: input.remarks.trim(), href: "/institution" }, now);
-              return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `${input.decision === "approved" ? "Approved" : "Rejected"} ${c.ref}: ${input.remarks.trim()}`, payload: { decision: input.decision, caseType: c.type } };
+              notify(d, { recipientRole: null, institutionId: c.institutionId, severity: input.decision === "approved" ? "success" : "critical", title: `${c.ref} ${input.decision} (ref. ${referenceNo})`, body: reason, href: "/institution" }, now);
+              return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `${input.decision === "approved" ? "Approved" : "Rejected"} ${c.ref} (ref. ${referenceNo}): ${reason}`, payload: { decision: input.decision, caseType: c.type, referenceNo } };
             },
           ),
 
@@ -568,7 +577,8 @@ export const useDemoStore = create<DemoState>()(
     },
     {
       name: "fdr-sentinel-demo",
-      version: 1,
+      // v2: case decisions + brief clearance sources. Older persisted data is discarded and reseeded.
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ data: s.data, session: s.session }),
       // Rehydrated manually by <DemoProvider> so server and first client render match.

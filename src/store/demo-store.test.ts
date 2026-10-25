@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { verifyChain } from "@/lib/audit-chain";
 import { can } from "@/lib/authz";
-import { todayIST } from "@/lib/dates";
+import { formatDate, todayIST } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { buildSeed } from "@/data/seed";
@@ -32,6 +32,12 @@ describe("seed", () => {
   });
 });
 
+describe("dates", () => {
+  it("formats as DD MMM YYYY", () => {
+    expect(formatDate("2026-09-07")).toBe("07 Sep 2026");
+  });
+});
+
 describe("money", () => {
   it("formats paise with Indian grouping", () => {
     expect(formatINR(1_25_00_000_00)).toBe("₹1,25,00,000.00");
@@ -53,7 +59,7 @@ describe("commands", () => {
   it("rejects a command the role may not perform, without writing", async () => {
     store().enterAs("u-aud");
     const before = data().audit.length;
-    const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", remarks: "ok" });
+    const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: "DC/X/1" });
     expect(r.ok).toBe(false);
     expect(data().audit).toHaveLength(before);
   });
@@ -66,16 +72,31 @@ describe("commands", () => {
 
   it("runs a clean approval and appends hash-chained events", async () => {
     store().enterAs("u-ap");
-    const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", remarks: "All fields match." });
+    const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "All fields match.", referenceNo: "DC/VER/2026/0142" });
     expect(r).toEqual({ ok: true, id: "vc-02" });
     expect(data().instruments.find((i) => i.id === "fdr-wgce-01")!.status).toBe("verified");
     expect(data().audit.at(-1)!.action).toBe("decision.recorded");
     expect((await verifyChain(data().audit)).ok).toBe(true);
   });
 
+  it("requires a reason and a reference number for every decision", async () => {
+    store().enterAs("u-ap");
+    expect((await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: " " })).ok).toBe(false);
+    expect(data().cases.find((c) => c.id === "vc-02")!.status).toBe("ready_for_decision");
+    expect((await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: "DC/VER/1" })).ok).toBe(true);
+    expect(data().cases.find((c) => c.id === "vc-02")!.decision).toMatchObject({ referenceNo: "DC/VER/1", decidedBy: "u-ap" });
+  });
+
+  it("uses the six Clause 6.46 items and the four brief clearance sources", () => {
+    const items = data().checklistRequirements.filter((r) => r.checklist === "clause_6_46");
+    expect(items).toHaveLength(6);
+    expect(items.every((r) => r.provenance === "brief")).toBe(true);
+    expect(new Set(data().clearances.map((c) => c.department))).toEqual(new Set(["pgrc", "vigilance_cell", "approval_bureau", "finance"]));
+  });
+
   it("refuses approval while a critical finding is open", async () => {
     store().enterAs("u-ap");
-    const r = await store().recordDecision({ caseId: "vc-01", decision: "approved", remarks: "x" });
+    const r = await store().recordDecision({ caseId: "vc-01", decision: "approved", reason: "x", referenceNo: "DC/X/2" });
     expect(r.ok).toBe(false);
   });
 
@@ -88,7 +109,7 @@ describe("commands", () => {
     expect(data().cases.find((c) => c.id === "vc-05")!.status).toBe("ready_for_decision");
 
     store().enterAs("u-ap");
-    expect((await store().recordDecision({ caseId: "vc-05", decision: "approved", remarks: "Release." })).ok).toBe(true);
+    expect((await store().recordDecision({ caseId: "vc-05", decision: "approved", reason: "Release.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
     expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("released");
     expect(data().instruments.find((i) => i.id === "fdr-kit-06")!.status).toBe("released");
     expect((await verifyChain(data().audit)).ok).toBe(true);

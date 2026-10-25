@@ -200,7 +200,17 @@ export interface VerificationCase {
   openedAt: ISOTimestamp;
   updatedAt: ISOTimestamp;
   dueDate: ISODate | null;
+  /** Only an Approver records this, always with a reason and a reference number. */
+  decision: CaseDecision | null;
   version: number;
+}
+
+export interface CaseDecision {
+  outcome: "approved" | "rejected";
+  reason: string;
+  referenceNo: string;
+  decidedBy: string;
+  decidedAt: ISOTimestamp;
 }
 
 export type FindingType =
@@ -244,7 +254,8 @@ export interface ReleaseRequest {
   decidedAt: ISOTimestamp | null;
 }
 
-export type ClearanceDepartment = "accounts" | "approval_bureau" | "grievance_cell" | "vigilance";
+/** Clearance sources named in CLAUDE.md §6. */
+export type ClearanceDepartment = "pgrc" | "vigilance_cell" | "approval_bureau" | "finance";
 
 export interface ClearanceRecord {
   id: string;
@@ -278,8 +289,14 @@ export interface PolicyRule {
   version: number;
   effectiveFrom: ISODate;
   /** `demo_config` = placeholder value pending verification against the handbook. */
-  provenance: "demo_config" | "verified";
+  provenance: Provenance;
 }
+
+/**
+ * `brief` = taken from the project brief / CLAUDE.md (handbook page not yet linked);
+ * `demo_config` = placeholder value; `verified` = checked against the handbook.
+ */
+export type Provenance = "demo_config" | "brief" | "verified";
 
 export type ChecklistKind = "clause_6_46" | "annexure_1" | "annexure_2";
 
@@ -294,7 +311,7 @@ export interface ChecklistRequirement {
   sourcePage: number | null;
   version: number;
   effectiveFrom: ISODate;
-  provenance: "demo_config" | "verified";
+  provenance: Provenance;
 }
 
 export interface CaseChecklistItem {

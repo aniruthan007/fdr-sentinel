@@ -1,30 +1,32 @@
-# Architecture — demo layer vs production design
+# Architecture — demo layer vs production target
 
-FDR Sentinel is built in two layers that share one domain model.
+FDR Sentinel is a **one-day, frontend-only build**. What is deployed on Vercel is the **demo layer**.
+The **production target** is the design in `docs/brief.md` §5–6. Both share one domain model.
 
-- **Demo layer (what is deployed today).** Runs entirely in the browser. Seed data, a Zustand store
-  persisted to `localStorage`, and the same authorisation, state-machine and audit-chain code the
-  production design uses. Nothing leaves the browser.
-- **Production design (what the demo layer stands in for).** Next.js Route Handlers / Server Actions in
-  front of Supabase Postgres with Row-Level Security, Supabase Auth and private Storage, Vercel Cron for
-  the daily maturity scan, and typed adapters for bank and departmental systems.
+- **Demo layer (deployed).** Next.js 15 static/client rendering. Typed seed data in `src/data/`, a
+  Zustand store persisted to `localStorage`, and the authorisation, state-machine and audit-chain code
+  the production design would also run. No backend, no database, no real auth. Nothing leaves the browser.
+- **Production target (not built).** FastAPI services in front of PostgreSQL with Row-Level Security,
+  an OIDC identity provider, private object storage for documents, OCR workers fed by a job queue, a
+  daily maturity-scan job, and typed adapters for bank and departmental systems. Supabase is one option
+  for hosting the Postgres / auth / storage part of that target.
 
 The point of the split: a judge can open the URL cold and use every flow with zero setup and zero chance
-of a backend failing on stage, while the code that matters — permissions, transitions, audit — is the
-code production would run.
+of a backend failing on stage, while the logic that matters — permissions, transitions, audit — is
+written the way production would run it.
 
-## Request path
+## Command path
 
 ```
 UI component
-  └─ store command (src/store/demo-store.ts)       ← production: Server Action
-       1. can(role, action, ctx)  (src/lib/authz.ts) ← production: same function + Postgres RLS
-       2. structuredClone(state)                      ← production: DB transaction
-       3. validate + mutate via state machines        ← production: same machines (src/lib/workflows.ts)
+  └─ store command (src/store/demo-store.ts)          ← production: API endpoint
+       1. can(role, action, ctx)  (src/lib/authz.ts)   ← production: same check server-side + Postgres RLS
+       2. structuredClone(state)                        ← production: DB transaction
+       3. validate + mutate via state machines          ← production: same machines
           (src/lib/workflows.ts)
-       4. seal audit event onto SHA-256 chain         ← production: audit_events row, same hash
+       4. seal audit event onto SHA-256 chain           ← production: append-only audit_events row
           (src/lib/audit-chain.ts)
-       5. commit (set state → localStorage)           ← production: COMMIT
+       5. commit (set state → localStorage)             ← production: COMMIT
 ```
 
 If any step fails nothing is written. Commands are serialised so every audit event chains onto the one
@@ -32,19 +34,19 @@ before it.
 
 ## Mapping
 
-| Concern | Demo layer | Production design |
+| Concern | Demo layer | Production target |
 |---|---|---|
-| Data store | Zustand + `localStorage` (`fdr-sentinel-demo`) | Supabase Postgres, `supabase/migrations/*` |
-| Tables | One typed array per table (`src/data/seed.ts → DemoData`) | Same tables, UUID PKs, FKs, check constraints, indexes on `institution_id`, `status`, `maturity_date`, `submitted_at` |
-| Identity | `/enter` role cards set a session; no password | Supabase Auth with seeded demo accounts; one-click role entry |
-| Authorisation | `can(role, action, ctx)` before every command; route gating in `PortalShell` | Same `can()` in every Server Action / Route Handler, mirrored by RLS policies |
-| Tenant isolation | `can()` compares actor vs resource `institutionId`; institution pages filter by session | RLS: `institution_id = auth.jwt() ->> 'institution_id'` on every table that has one |
+| Data store | Zustand + `localStorage` (`fdr-sentinel-demo`) | PostgreSQL |
+| Tables | One typed array per table (`src/data/seed.ts → DemoData`) | Same tables: UUID PKs, FKs, check constraints, indexes on `institution_id`, `status`, `maturity_date`, `submitted_at` |
+| Identity | `/enter` role cards set a session; no password | OIDC sign-in |
+| Authorisation | `can(role, action, ctx)` before every command; route gating in `PortalShell` | Same check in every endpoint, mirrored by RLS |
+| Tenant isolation | `can()` compares actor vs resource `institutionId`; institution pages filter by session | RLS on every table with `institution_id` |
 | State changes | Explicit commands → `assertTransition()` | Same |
-| Audit | SHA-256 chain via Web Crypto, canonical JSON, `prevHash` + `hash` | `audit_events` with the same columns; append-only (no UPDATE/DELETE grants) |
+| Audit | SHA-256 chain via Web Crypto, canonical JSON, `prevHash` + `hash` | `audit_events`, same columns, append-only |
 | Money | Integer paise (`number`) | `numeric(14,2)` |
-| Dates | `YYYY-MM-DD` strings for dates, UTC ISO for instants, shown in IST | `date` and `timestamptz` |
-| Maturity scan | Seeded `jobs` rows; status derived on read | Vercel Cron → job table → notifications |
-| OCR / extraction | Precomputed extractions with bounding boxes (`source: PRECOMPUTED`) | Same for seeded docs; optional tesseract.js in a Web Worker for uploads (Phase 3) |
+| Dates | `YYYY-MM-DD` for dates, UTC ISO for instants, shown in Asia/Kolkata | `date` and `timestamptz` |
+| Maturity scan | Seeded `jobs` rows; maturity status derived on read | Scheduled job → notifications |
+| Documents / OCR | HTML/SVG replicas with known field regions; precomputed extractions (`source: PRECOMPUTED`) | OCR workers produce extractions with confidence + bounding boxes |
 | Bank / department systems | Mock adapters, every record tagged `SIMULATED` | Typed adapters behind the same interface |
 
 ## Demo-data lifecycle
@@ -52,25 +54,11 @@ before it.
 - Seed is deterministic for a given day: every date is an offset from today in Asia/Kolkata, so
   "matures in 18 days" is always true.
 - On first load, or when the stored seed is from an earlier IST day, the store regenerates the seed.
-  Within a day, everything a visitor does persists across reloads.
+  Within a day, everything a visitor does persists across reloads and is visible across roles.
 - **Reset demo** rebuilds the seed and appends a `demo.reset` event to the fresh chain.
 - The persisted state is versioned; a version bump discards old data instead of migrating it.
 
-## Deliberate deviations from the brief
-
-| Brief says | We do | Why |
-|---|---|---|
-| FastAPI + SQLAlchemy + Alembic | Next.js 15 App Router (Route Handlers + Server Actions) | One deployable on Vercel |
-| PostgreSQL | Supabase Postgres + SQL migrations | Free tier, managed, RLS built in |
-| OIDC provider | Supabase Auth, seeded accounts, one-click role entry | Judges never sign up or type a password |
-| Celery / workers | Postgres job table + Vercel Cron | Fits serverless |
-| Real OCR pipeline | Precomputed extractions + optional live tesseract.js | Demo can never fail on stage |
-| Bank / PGRC / Vigilance integrations | Typed mock adapters labelled `SIMULATED` | No real access |
-| **Phase 1 only:** server persistence | Browser-only demo store (`localStorage`) | Ships a working, deployable demo on day 1–2; Supabase schema + RLS follows behind the same interfaces |
-
-## Things the demo layer cannot prove
-
-Being honest about the gap:
+## What the demo layer cannot prove
 
 - Client-side `can()` is a correctness check, not a security boundary — anyone can edit `localStorage`.
   In production the boundary is the server and RLS.

@@ -19,7 +19,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 /**
  * Layout for both portals. In this demo layer the role check runs in the browser; in production the
- * same `can()` check runs in Server Actions and Postgres RLS (see docs/architecture.md).
+ * same `can()` check runs server-side and in Postgres RLS (see docs/architecture.md).
  */
 export function PortalShell({ portal, children }: { portal: Portal; children: React.ReactNode }) {
   const ready = useDemoReady();

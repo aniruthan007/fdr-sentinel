@@ -21,7 +21,7 @@ renewal, to release — with a SHA-256 hash-chained audit trail behind every act
 | Institution Owner — Kaveri Institute of Technology | `/institution` | An amount/maturity discrepancy, an FDR maturing in 18 days, a release request awaiting clearances |
 | Processing Officer | `/official` | Verification queue: mismatch, missing-document and fresh cases |
 | Clearance Officer | `/official` | Two pending departmental clearances (SIMULATED sources) |
-| Approver | `/official` | A clean case ready for decision |
+| Approver | `/official` | A clean case ready for an authorised decision (needs reason + reference no.) |
 | Auditor | `/official` | Read-only access and the full audit chain |
 
 ## Run locally
@@ -40,7 +40,7 @@ pnpm build
 ## Stack
 
 Next.js 15 (App Router, TypeScript strict) · Tailwind CSS v4 · shadcn/ui (Radix) · lucide-react · motion ·
-Zustand · TanStack Table · cmdk · Geist Sans/Mono · Vitest.
+Zustand · TanStack Table · cmdk · Geist Sans/Mono · Vitest. Frontend-only: no backend, database or real auth.
 
 ## Where things live
 

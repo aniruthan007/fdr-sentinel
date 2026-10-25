@@ -1,13 +1,28 @@
-import type { CaseChecklistItem, VerificationCase, VerificationFinding } from "@/types";
+import type { CaseChecklistItem, CaseDecision, VerificationCase, VerificationFinding } from "@/types";
 import type { SeedContext } from "./context";
 
+/** Recorded decisions on the two closed cases — reason and reference number, as CLAUDE.md §3.5 requires. */
+function seededDecision(ctx: SeedContext, caseId: string): CaseDecision | null {
+  if (caseId === "vc-06") {
+    return { outcome: "approved", reason: "All Clause 6.46 items satisfied; all clearances recorded.", referenceNo: "DC/REL/2026/0011", decidedBy: "u-ap", decidedAt: ctx.t(-35, 15, 20) };
+  }
+  if (caseId === "vc-07") {
+    return { outcome: "approved", reason: "Renewed FDR verified; lien confirmed by bank.", referenceNo: "DC/REN/2025/0412", decidedBy: "u-ap", decidedAt: ctx.t(-360, 12, 35) };
+  }
+  return null;
+}
+
 /**
- * The six required demo stories (CLAUDE.md §8):
+ * The six required demo stories (CLAUDE.md §6):
  *   vc-02 clean · vc-03 missing document · vc-01 amount/date mismatch ·
  *   vc-05 release pending clearance · vc-07 renewal lineage · vc-06 closed/released
  * plus vc-04, a fresh unassigned case for the work queue.
  */
 export function buildCases(ctx: SeedContext): VerificationCase[] {
+  return buildCaseRows(ctx).map((c) => ({ ...c, decision: seededDecision(ctx, c.id) }));
+}
+
+function buildCaseRows(ctx: SeedContext): Omit<VerificationCase, "decision">[] {
   return [
     {
       id: "vc-01",
@@ -183,15 +198,17 @@ const ITEMS: ItemRow[] = [
   ["vc-04", "req-a1-02", "pending", null, null],
   ["vc-04", "req-a1-03", "pending", null, null],
   ["vc-05", "req-646-01", "satisfied", "doc-kit-rel", -10],
-  ["vc-05", "req-646-02", "satisfied", "doc-fdr-kit-06-rcpt", -10],
-  ["vc-05", "req-646-03", "satisfied", null, -9],
-  ["vc-05", "req-646-04", "pending", null, null],
+  ["vc-05", "req-646-02", "satisfied", "doc-kit-aff6-rel", -10],
+  ["vc-05", "req-646-03", "satisfied", "doc-fdr-kit-06-rcpt", -10],
+  ["vc-05", "req-646-04", "satisfied", "doc-kit-loa", -10],
   ["vc-05", "req-646-05", "pending", null, null],
+  ["vc-05", "req-646-06", "satisfied", null, -8],
   ["vc-06", "req-646-01", "satisfied", "doc-ysm-rel", -60],
-  ["vc-06", "req-646-02", "satisfied", "doc-fdr-ysm-01-rcpt", -60],
-  ["vc-06", "req-646-03", "satisfied", null, -50],
-  ["vc-06", "req-646-04", "satisfied", null, -45],
-  ["vc-06", "req-646-05", "satisfied", null, -40],
+  ["vc-06", "req-646-02", "satisfied", "doc-ysm-aff6", -60],
+  ["vc-06", "req-646-03", "satisfied", "doc-fdr-ysm-01-rcpt", -60],
+  ["vc-06", "req-646-04", "satisfied", "doc-ysm-loa", -60],
+  ["vc-06", "req-646-05", "satisfied", null, -41],
+  ["vc-06", "req-646-06", "satisfied", null, -52],
   ["vc-07", "req-a2-01", "satisfied", "doc-fdr-kit-03-rcpt", -362],
   ["vc-07", "req-a2-02", "satisfied", "doc-kit-bank", -361],
 ];
@@ -203,7 +220,7 @@ export function buildChecklistItems(ctx: SeedContext): CaseChecklistItem[] {
     requirementId,
     status,
     evidenceDocumentId: evidence,
-    checkedBy: offset === null ? null : caseId === "vc-05" && requirementId === "req-646-03" ? "u-co" : "u-po",
+    checkedBy: offset === null ? null : ["req-646-05", "req-646-06"].includes(requirementId) ? "u-co" : "u-po",
     checkedAt: offset === null ? null : ctx.t(offset, 12, 0),
   }));
 }

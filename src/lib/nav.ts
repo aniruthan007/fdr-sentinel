@@ -38,7 +38,7 @@ export const INSTITUTION_NAV: NavItem[] = [
   { href: "/institution/documents", label: "Documents", icon: FileText, group: "Institution", roles: INST, phase: 3, summary: "Uploaded receipts, affidavits and letters, with extracted fields to confirm." },
   { href: "/institution/releases", label: "Release requests", icon: Undo2, group: "Requests", roles: INST, phase: 3, summary: "Ask for a deposit to be released and track clearances." },
   { href: "/institution/renewals", label: "Renewals", icon: RefreshCcw, group: "Requests", roles: INST, phase: 3, summary: "Instruments nearing maturity and their renewal lineage." },
-  { href: "/institution/notifications", label: "Notifications", icon: Bell, group: "Requests", roles: INST, phase: 5, summary: "Reminders, correction requests and decisions." },
+  { href: "/institution/notifications", label: "Notifications", icon: Bell, group: "Requests", roles: INST, phase: 3, summary: "Reminders, correction requests and decisions." },
 ];
 
 export const OFFICIAL_NAV: NavItem[] = [
@@ -49,8 +49,8 @@ export const OFFICIAL_NAV: NavItem[] = [
   { href: "/official/decisions", label: "Decisions", icon: Gavel, group: "Workspace", roles: ["approver", "supervisor", "auditor"], phase: 4, summary: "Cases ready for a recorded decision." },
   { href: "/official/instruments", label: "Instruments", icon: FileStack, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Every FDR, RPGF and RTGS instrument across institutions." },
   { href: "/official/institutions", label: "Institutions", icon: Building2, group: "Records", roles: ALL_OFFICIAL, phase: 4, summary: "Institutions, their obligations and deposit coverage." },
-  { href: "/official/maturity", label: "Maturity radar", icon: CalendarClock, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 5, summary: "Instruments maturing in the next 90 days." },
-  { href: "/official/audit", label: "Audit log", icon: ScrollText, group: "Oversight", roles: ["auditor", "supervisor", "system_admin"], phase: 5, summary: "Tamper-evident, hash-chained record of every action." },
+  { href: "/official/maturity", label: "Maturity radar", icon: CalendarClock, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Instruments maturing in the next 90 days." },
+  { href: "/official/audit", label: "Audit log", icon: ScrollText, group: "Oversight", roles: ["auditor", "supervisor", "system_admin"], phase: 4, summary: "Tamper-evident, hash-chained record of every action." },
   { href: "/official/reports", label: "Reports", icon: BarChart3, group: "Oversight", roles: ["auditor", "supervisor", "approver"], phase: 5, summary: "Coverage, maturity and turnaround reports with CSV export." },
   { href: "/official/policy", label: "Policy & checklists", icon: BookCheck, group: "Oversight", roles: ["policy_admin", "supervisor", "auditor", "system_admin"], phase: 5, summary: "Versioned, source-linked rules and checklists." },
   { href: "/official/notifications", label: "Notifications", icon: Bell, group: "Oversight", roles: ALL_OFFICIAL, phase: 5, summary: "Alerts routed to your role." },

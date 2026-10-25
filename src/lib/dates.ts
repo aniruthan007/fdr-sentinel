@@ -53,12 +53,17 @@ const timestampFmt = new Intl.DateTimeFormat("en-IN", {
   hour12: false,
 });
 
+/** en-IN renders September as "Sept"; the house style is DD MMM YYYY. */
+function threeLetterMonth(s: string): string {
+  return s.replace("Sept", "Sep");
+}
+
 export function formatDate(date: ISODate): string {
-  return dateFmt.format(new Date(toUTCms(date)));
+  return threeLetterMonth(dateFmt.format(new Date(toUTCms(date))));
 }
 
 export function formatTimestamp(ts: ISOTimestamp): string {
-  return `${timestampFmt.format(new Date(ts))} IST`;
+  return `${threeLetterMonth(timestampFmt.format(new Date(ts)))} IST`;
 }
 
 export function formatRelativeDays(days: number): string {

@@ -60,7 +60,7 @@ export const STATUS_META: Record<AnyStatus, StatusMeta> = {
   open: { label: "Open", tone: "info", hint: "Not yet picked up" },
   in_review: { label: "In review", tone: "primary", hint: "An officer is working on it" },
   awaiting_institution: { label: "Awaiting institution", tone: "warning", hint: "Correction requested from the institution" },
-  ready_for_decision: { label: "Ready for decision", tone: "primary", hint: "All checks done; waiting for the approver" },
+  ready_for_decision: { label: "Ready for authorised decision", tone: "primary", hint: "All checks done. Not an approval: only the Approver records a decision" },
   approved: { label: "Approved", tone: "success", hint: "Approver recorded a positive decision" },
   closed: { label: "Closed", tone: "neutral", hint: "No further action" },
   // Release requests
