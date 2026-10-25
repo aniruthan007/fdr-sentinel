@@ -41,7 +41,7 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   bank_confirmation: "Bank lien confirmation",
 };
 
-const reviewedStatus = new Set(["verified", "renewed", "release_requested", "released"]);
+const reviewedStatus = new Set(["verified", "active", "replaced", "release_requested", "released"]);
 
 function receiptFor(inst: FinancialInstrument, ctx: SeedContext, i: number): DocumentRecord {
   const slug = inst.instrumentNo.replace(/[^A-Za-z0-9]+/g, "-");
@@ -140,7 +140,7 @@ export function buildExtractions(
   for (const inst of instruments) {
     const spec = EXTRACTED[inst.id];
     if (!spec) continue;
-    const confirmed = inst.status === "verified";
+    const confirmed = inst.status === "active";
     const declared: Record<ExtractionField, string> = {
       bank_name: inst.bankName,
       instrument_no: inst.instrumentNo,

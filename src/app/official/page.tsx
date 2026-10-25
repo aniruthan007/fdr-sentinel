@@ -20,7 +20,14 @@ export default function OfficialOverviewPage() {
 
   const activeCases = useMemo(() => d.cases.filter((c) => ACTIVE.includes(c.status)), [d]);
   const ready = activeCases.filter((c) => c.status === "ready_for_decision");
-  const pendingClearances = useMemo(() => d.clearances.filter((c) => c.status === "pending"), [d]);
+  // Brief §2.1: clearance officers see only their assigned clearances.
+  const pendingClearances = useMemo(
+    () =>
+      d.clearances.filter(
+        (c) => ["pending", "further_info_required"].includes(c.status) && (role !== "clearance_officer" || c.assignedTo === session?.userId),
+      ),
+    [d, role, session],
+  );
   const maturing = d.instruments.filter((i) => ["near_maturity", "matured"].includes(instrumentDisplayStatus(i, today))).length;
   const caseCols = useMemo(() => caseColumns(d), [d]);
   const clrCols = useMemo(() => clearanceColumns(d), [d]);
@@ -33,21 +40,28 @@ export default function OfficialOverviewPage() {
     <PortalPage
       href="/official"
       stats={
+        role === "clearance_officer" ? (
+          <>
+            <StatCard label="Clearances outstanding" value={pendingClearances.length} icon={ShieldCheck} tone={pendingClearances.length ? "warning" : "default"} href="/official/clearances" />
+            <StatCard label="Assigned to you" value={d.clearances.filter((c) => c.assignedTo === session?.userId).length} hint="All sources SIMULATED" icon={ListChecks} href="/official/clearances" />
+          </>
+        ) : (
         <>
           <StatCard label="Active cases" value={activeCases.length} hint={`${activeCases.filter((c) => !c.assigneeId).length} unassigned`} icon={ListChecks} href="/official/cases" />
-          <StatCard label="Ready for decision" value={ready.length} icon={Gavel} href="/official/decisions" />
-          <StatCard label="Clearances pending" value={pendingClearances.length} icon={ShieldCheck} tone={pendingClearances.length ? "warning" : "default"} href="/official/clearances" />
+          <StatCard label="Ready for authorised decision" value={ready.length} icon={Gavel} href="/official/decisions" />
+          <StatCard label="Clearances outstanding" value={pendingClearances.length} icon={ShieldCheck} tone={pendingClearances.length ? "warning" : "default"} href="/official/clearances" />
           {role === "auditor" ? (
             <StatCard label="Audit events" value={d.audit.length} hint="SHA-256 hash-chained" icon={ScrollText} href="/official/audit" />
           ) : (
             <StatCard label="Maturing ≤ 30 days" value={maturing} hint="Across all institutions" icon={CalendarClock} tone={maturing ? "warning" : "default"} href="/official/maturity" />
           )}
         </>
+        )
       }
     >
       {role === "clearance_officer" ? (
-        <Section title="Your queue · pending clearances">
-          <DataTable columns={clrCols} data={pendingClearances} emptyTitle="No clearances pending" />
+        <Section title="Your queue · outstanding clearances">
+          <DataTable columns={clrCols} data={pendingClearances} emptyTitle="No clearances outstanding" />
         </Section>
       ) : (
         <Section title={`Your queue · ${role ? ROLE_LABELS[role] : ""}`}>

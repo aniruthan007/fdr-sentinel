@@ -53,6 +53,19 @@ describe("authz", () => {
     expect(can("institution_owner", "uploadDocument", { actorInstitutionId: "inst-kit", resourceInstitutionId: "inst-kit" })).toBe(true);
     expect(can("institution_owner", "uploadDocument", { actorInstitutionId: "inst-kit", resourceInstitutionId: "inst-wgce" })).toBe(false);
   });
+
+  it("matches brief §2.1 least privilege", () => {
+    expect(can("institution_operator", "uploadDocument")).toBe(true);
+    expect(can("institution_operator", "submitReleaseRequest")).toBe(false);
+    expect(can("institution_operator", "renewInstrument")).toBe(false);
+    expect(can("processing_officer", "uploadDocument")).toBe(false);
+    expect(can("supervisor", "raiseFinding")).toBe(false);
+    expect(can("system_admin", "recordDecision")).toBe(false);
+    expect(can("policy_admin", "recordDecision")).toBe(false);
+    for (const action of ["submitReleaseRequest", "uploadDocument", "confirmField", "raiseFinding", "requestCorrection", "recordClearance", "recordDecision", "renewInstrument"] as const) {
+      expect(can("auditor", action)).toBe(false);
+    }
+  });
 });
 
 describe("commands", () => {
@@ -74,7 +87,10 @@ describe("commands", () => {
     store().enterAs("u-ap");
     const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "All fields match.", referenceNo: "DC/VER/2026/0142" });
     expect(r).toEqual({ ok: true, id: "vc-02" });
-    expect(data().instruments.find((i) => i.id === "fdr-wgce-01")!.status).toBe("verified");
+    // Under review → Verified → Active, each an explicit, recorded transition (brief §7.2).
+    expect(data().instruments.find((i) => i.id === "fdr-wgce-01")!.status).toBe("active");
+    const steps = data().workflowEvents.filter((e) => e.entityId === "fdr-wgce-01").map((e) => e.to);
+    expect(steps.slice(-2)).toEqual(["verified", "active"]);
     expect(data().audit.at(-1)!.action).toBe("decision.recorded");
     expect((await verifyChain(data().audit)).ok).toBe(true);
   });
@@ -100,17 +116,20 @@ describe("commands", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("completes a release: clearances → decision → released", async () => {
+  it("completes a release: clearances → ready for authorised decision → approved", async () => {
     store().enterAs("u-co");
-    for (const c of data().clearances.filter((x) => x.releaseRequestId === "rr-01" && x.status === "pending")) {
-      expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", remarks: "No dues" })).ok).toBe(true);
+    const outstanding = data().clearances.filter((x) => x.releaseRequestId === "rr-01" && x.status !== "cleared");
+    expect(outstanding.map((c) => c.status).sort()).toEqual(["further_info_required", "pending"]);
+    for (const c of outstanding) {
+      expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `REF/${c.id}`, remarks: "" })).ok).toBe(true);
     }
-    expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("clearances_complete");
+    expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("ready_for_decision");
     expect(data().cases.find((c) => c.id === "vc-05")!.status).toBe("ready_for_decision");
+    expect(data().checklistItems.filter((i) => i.caseId === "vc-05").every((i) => i.status === "satisfied")).toBe(true);
 
     store().enterAs("u-ap");
     expect((await store().recordDecision({ caseId: "vc-05", decision: "approved", reason: "Release.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
-    expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("released");
+    expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("approved");
     expect(data().instruments.find((i) => i.id === "fdr-kit-06")!.status).toBe("released");
     expect((await verifyChain(data().audit)).ok).toBe(true);
   });
@@ -122,7 +141,7 @@ describe("commands", () => {
     expect(r.ok).toBe(true);
     const succ = data().instruments.find((i) => i.id === (r.ok ? r.id : ""))!;
     expect(succ.predecessorInstrumentId).toBe("fdr-kit-03");
-    expect(data().instruments.find((i) => i.id === "fdr-kit-03")!.status).toBe("verified");
+    expect(data().instruments.find((i) => i.id === "fdr-kit-03")!.status).toBe("active");
   });
 
   it("submits a release request with SIMULATED clearances", async () => {
@@ -131,7 +150,9 @@ describe("commands", () => {
     expect(r.ok).toBe(true);
     const rr = data().releaseRequests.at(-1)!;
     expect(rr.status).toBe("submitted");
-    expect(data().clearances.filter((c) => c.releaseRequestId === rr.id)).toHaveLength(4);
+    const clearances = data().clearances.filter((c) => c.releaseRequestId === rr.id);
+    expect(clearances).toHaveLength(4);
+    expect(clearances.every((c) => c.status === "not_requested" && c.source === "SIMULATED")).toBe(true);
   });
 
   it("raises a finding, requests correction, and resets the demo", async () => {
@@ -139,9 +160,30 @@ describe("commands", () => {
     expect((await store().raiseFinding({ caseId: "vc-04", type: "name_mismatch", severity: "warning", description: "Beneficiary name abbreviated" })).ok).toBe(true);
     expect((await store().requestCorrection({ caseId: "vc-04", message: "Upload a corrected receipt" })).ok).toBe(true);
     expect(data().cases.find((c) => c.id === "vc-04")!.status).toBe("awaiting_institution");
+    expect(data().instruments.find((i) => i.id === "fdr-hit-03")!.status).toBe("needs_correction");
     expect((await store().resetDemo()).ok).toBe(true);
     expect(data().cases.find((c) => c.id === "vc-04")!.status).toBe("open");
     expect(data().audit.at(-1)!.action).toBe("demo.reset");
+  });
+
+  it("enforces brief §7.4 clearance rules", async () => {
+    store().enterAs("u-co");
+    const pgrc = data().clearances.find((c) => c.releaseRequestId === "rr-01" && c.department === "pgrc")!;
+    // Cleared needs a reference; other outcomes need a reason.
+    expect((await store().recordClearance({ clearanceId: pgrc.id, outcome: "cleared", remarks: "ok" })).ok).toBe(false);
+    expect((await store().recordClearance({ clearanceId: pgrc.id, outcome: "not_applicable", remarks: "" })).ok).toBe(false);
+    // Error / unavailable is never treated as cleared.
+    expect((await store().recordClearance({ clearanceId: pgrc.id, outcome: "error_unavailable", remarks: "Source timed out" })).ok).toBe(true);
+    expect((await store().recordClearance({ clearanceId: pgrc.id, outcome: "cleared", reference: "PGRC/1", remarks: "" })).ok).toBe(false);
+    expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("awaiting_clearances");
+  });
+
+  it("only lets the assigned clearance officer record a clearance", async () => {
+    const pgrc = data().clearances.find((c) => c.releaseRequestId === "rr-01" && c.department === "pgrc")!;
+    useDemoStore.setState({ data: { ...data(), clearances: data().clearances.map((c) => (c.id === pgrc.id ? { ...c, assignedTo: "someone-else" } : c)) } });
+    store().enterAs("u-co");
+    const r = await store().recordClearance({ clearanceId: pgrc.id, outcome: "cleared", reference: "PGRC/1", remarks: "" });
+    expect(r).toEqual({ ok: false, error: "This clearance is not assigned to you" });
   });
 
   it("detects tampering in the audit chain", async () => {

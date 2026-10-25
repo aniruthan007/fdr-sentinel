@@ -21,7 +21,7 @@ export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
       instrumentIds: ["fdr-kit-06"],
       totalPaise: rupees(15_00_000),
       reason: "M.Tech (Structural Engineering) discontinued from AY 2026-27; release of the programme deposit is sought.",
-      status: "pending_clearance",
+      status: "awaiting_clearances",
       caseId: "vc-05",
       submittedBy: "u-owner",
       submittedAt: ctx.t(-12, 13, 50),
@@ -35,7 +35,7 @@ export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
       instrumentIds: ["fdr-ysm-01"],
       totalPaise: rupees(30_00_000),
       reason: "PGDM (Evening) programme closed with no enrolled students; release of the programme deposit is sought.",
-      status: "released",
+      status: "closed",
       caseId: "vc-06",
       submittedBy: "ext-inst-ysm",
       submittedAt: ctx.t(-70, 10, 40),
@@ -44,27 +44,29 @@ export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
   ];
 }
 
-type ClearanceRow = [rr: string, dept: ClearanceDepartment, status: ClearanceRecord["status"], remarks: string | null, offset: number | null];
+type ClearanceRow = [rr: string, dept: ClearanceDepartment, status: ClearanceRecord["status"], reference: string | null, remarks: string | null, offset: number | null];
 
 const CLEARANCES: ClearanceRow[] = [
-  ["rr-01", "finance", "cleared", "No outstanding dues on record.", -9],
-  ["rr-01", "approval_bureau", "cleared", "NOC issued: programme closure recorded for AY 2026-27.", -8],
-  ["rr-01", "pgrc", "pending", null, null],
-  ["rr-01", "vigilance_cell", "pending", null, null],
-  ["rr-02", "finance", "cleared", "No outstanding dues on record.", -55],
-  ["rr-02", "approval_bureau", "cleared", "NOC issued: closure approved.", -52],
-  ["rr-02", "pgrc", "cleared", "No open grievances.", -48],
-  ["rr-02", "vigilance_cell", "cleared", "Nothing adverse on record.", -41],
+  ["rr-01", "finance", "cleared", "FIN/NDC/2026/0418", "No outstanding dues on record.", -9],
+  ["rr-01", "approval_bureau", "cleared", "AB/NOC/2026/0093", "NOC issued: programme closure recorded for AY 2026-27.", -8],
+  ["rr-01", "pgrc", "pending", null, null, null],
+  ["rr-01", "vigilance_cell", "further_info_required", null, "Copy of the programme closure order requested.", -7],
+  ["rr-02", "finance", "cleared", "FIN/NDC/2026/0117", "No outstanding dues on record.", -55],
+  ["rr-02", "approval_bureau", "cleared", "AB/NOC/2026/0031", "NOC issued: closure approved.", -52],
+  ["rr-02", "pgrc", "cleared", "PGRC/CLR/2026/0052", "No open grievances.", -48],
+  ["rr-02", "vigilance_cell", "cleared", "VIG/CLR/2026/0040", "Nothing adverse on record.", -41],
 ];
 
 export function buildClearances(ctx: SeedContext): ClearanceRecord[] {
-  return CLEARANCES.map(([releaseRequestId, department, status, remarks, offset], i) => ({
+  return CLEARANCES.map(([releaseRequestId, department, status, reference, remarks, offset], i) => ({
     id: `clr-${String(i + 1).padStart(2, "0")}`,
     releaseRequestId,
     department,
     source: "SIMULATED",
     status,
+    reference,
     remarks,
+    assignedTo: "u-co",
     requestedAt: releaseRequestId === "rr-01" ? ctx.t(-11, 10, 0) : ctx.t(-60, 10, 0),
     recordedBy: offset === null ? null : "u-co",
     recordedAt: offset === null ? null : ctx.t(offset, 14, 30),

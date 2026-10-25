@@ -9,19 +9,25 @@ import {
 } from "@/types";
 
 /**
- * Role → permitted actions. The single source of truth for the demo layer.
+ * Role → permitted actions, least-privilege per brief §2.1. The single source of truth for the demo layer.
  * In the production target the same matrix is enforced server-side and mirrored by Postgres RLS.
- * Brief §2.1 is the authority; open items are logged in docs/open-questions.md.
+ *
+ * - Institution Owner submits requests; an Operator prepares drafts and uploads but does not submit
+ *   (submission needs a separately granted permission, not modelled in the demo).
+ * - Processing Officer reviews, confirms extracted fields and requests missing information; never decides.
+ * - Clearance Officer records only clearances assigned to them (checked in the command).
+ * - Only the Approver records a decision. Supervisor, Auditor, System and Policy Administrators make no
+ *   regulatory changes. `resetDemo` is a demo-harness control, not a record action.
  */
 const MATRIX: Record<Action, readonly Role[]> = {
   submitReleaseRequest: ["institution_owner"],
-  uploadDocument: ["institution_owner", "institution_operator", "processing_officer"],
+  uploadDocument: ["institution_owner", "institution_operator"],
   confirmField: ["institution_owner", "institution_operator", "processing_officer"],
-  raiseFinding: ["processing_officer", "supervisor"],
-  requestCorrection: ["processing_officer", "supervisor"],
+  raiseFinding: ["processing_officer"],
+  requestCorrection: ["processing_officer"],
   recordClearance: ["clearance_officer"],
   recordDecision: ["approver"],
-  renewInstrument: ["institution_owner", "institution_operator"],
+  renewInstrument: ["institution_owner"],
   resetDemo: [...INSTITUTION_ROLES, ...OFFICIAL_ROLES],
 };
 

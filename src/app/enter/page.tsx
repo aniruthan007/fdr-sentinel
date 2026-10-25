@@ -7,6 +7,7 @@ import { ArrowRight, Building2, ClipboardCheck, Gavel, ScrollText, ShieldCheck, 
 import { Brand } from "@/components/shell/brand";
 import { Skeleton } from "@/components/ui/skeleton";
 import { portalFor, ROLE_LABELS } from "@/lib/authz";
+import { flaggedInstrumentIds } from "@/lib/selectors";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { DEMO_USERS, ENTRY_ROLES } from "@/data/people";
 import type { DemoData } from "@/data/seed";
@@ -31,16 +32,17 @@ function waitingFor(role: Role, d: DemoData, today: string): string {
   switch (role) {
     case "institution_owner": {
       const mine = d.instruments.filter((i) => i.institutionId === "inst-kit");
-      const issues = mine.filter((i) => i.status === "discrepancy").length;
+      const flagged = flaggedInstrumentIds(d);
+      const issues = mine.filter((i) => flagged.has(i.id)).length;
       const maturing = mine.filter((i) => instrumentDisplayStatus(i, today) === "near_maturity").length;
-      return `${issues} discrepancy · ${maturing} FDR near maturity`;
+      return `${issues} flagged for review · ${maturing} FDR near maturity`;
     }
     case "processing_officer": {
       const n = d.cases.filter((c) => ["open", "in_review", "awaiting_institution"].includes(c.status)).length;
       return `${plural(n, "case")} in the verification queue`;
     }
     case "clearance_officer":
-      return `${plural(d.clearances.filter((c) => c.status === "pending").length, "clearance")} pending`;
+      return `${plural(d.clearances.filter((c) => c.assignedTo === "u-co" && ["pending", "further_info_required"].includes(c.status)).length, "clearance")} outstanding`;
     case "approver":
       return `${plural(d.cases.filter((c) => c.status === "ready_for_decision").length, "case")} ready for decision`;
     case "auditor":

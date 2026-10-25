@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { sealEvent } from "@/lib/audit-chain";
 import { can, ROLE_LABELS, type AuthzContext } from "@/lib/authz";
+import { STATUS_META } from "@/lib/status";
 import { todayIST } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
 import {
@@ -81,7 +82,10 @@ export interface RequestCorrectionInput {
 }
 export interface RecordClearanceInput {
   clearanceId: string;
-  outcome: Exclude<ClearanceStatus, "pending">;
+  outcome: Exclude<ClearanceStatus, "pending" | "not_requested">;
+  /** Required when the outcome is Cleared. */
+  reference?: string;
+  /** Reason; required for every outcome except Cleared. */
   remarks: string;
 }
 export interface RecordDecisionInput {
@@ -160,18 +164,24 @@ function moveCase(d: DemoData, c: VerificationCase, to: VerificationCase["status
   c.version += 1;
 }
 
-/** Walks submitted → under_verification → verified, validating each step. */
-function verifyInstrument(d: DemoData, inst: FinancialInstrument, actorId: string, now: ISOTimestamp) {
-  if (inst.status === "submitted") moveInstrument(d, inst, "under_verification", "startVerification", actorId, now);
-  moveInstrument(d, inst, "verified", "recordDecision", actorId, now);
+/** Brings an instrument into Under review from Submitted or Needs correction, validating each step. */
+function bringUnderReview(d: DemoData, inst: FinancialInstrument, actorId: string, now: ISOTimestamp) {
+  if (inst.status === "submitted" || inst.status === "needs_correction") moveInstrument(d, inst, "under_review", "startReview", actorId, now);
 }
 
-/** Re-derives an obligation's status from the verified instruments that secure it. */
+/** Under review → Verified (by authorised decision) → Active. Never inferred from dates or OCR (brief §7.2). */
+function verifyInstrument(d: DemoData, inst: FinancialInstrument, actorId: string, now: ISOTimestamp) {
+  bringUnderReview(d, inst, actorId, now);
+  moveInstrument(d, inst, "verified", "recordDecision", actorId, now);
+  moveInstrument(d, inst, "active", "activate", actorId, now);
+}
+
+/** Re-derives an obligation's status from the Active instruments that secure it. */
 function refreshObligation(d: DemoData, obligationId: string) {
   const ob = d.obligations.find((o) => o.id === obligationId);
   if (!ob || ob.status === "release_in_progress" || ob.status === "discharged") return;
   const covered = d.instruments
-    .filter((i) => i.obligationId === obligationId && i.status === "verified")
+    .filter((i) => i.obligationId === obligationId && i.status === "active")
     .reduce((sum, i) => sum + i.amountPaise, 0);
   const target = covered >= ob.requiredPaise ? "secured" : covered > 0 ? "partially_secured" : "pending";
   if (target !== ob.status && canTransition(obligationMachine, ob.status, target)) ob.status = target;
@@ -341,7 +351,8 @@ export const useDemoStore = create<DemoState>()(
               const ob = must(d.obligations.find((o) => o.id === obligationId), "Obligation");
               if (canTransition(obligationMachine, ob.status, "release_in_progress")) ob.status = "release_in_progress";
               for (const department of CLEARANCE_DEPARTMENTS) {
-                d.clearances.push({ id: newId("clr"), releaseRequestId: rrId, department, source: "SIMULATED", status: "pending", remarks: null, requestedAt: now, recordedBy: null, recordedAt: null });
+                // Not requested until an officer reaches the clearance stage (brief §7.3–7.4).
+                d.clearances.push({ id: newId("clr"), releaseRequestId: rrId, department, source: "SIMULATED", status: "not_requested", reference: null, remarks: null, assignedTo: null, requestedAt: null, recordedBy: null, recordedAt: null });
               }
               addChecklist(d, c.id, "clause_6_46");
               notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "info", title: `New release request ${ref}`, body: `${formatINR(total)} across ${insts.length} instrument(s).`, href: "/official/releases" }, now);
@@ -400,11 +411,9 @@ export const useDemoStore = create<DemoState>()(
               });
               if (c.status === "open") moveCase(d, c, "in_review", "raiseFinding", s.userId, now);
               else if (!["in_review", "awaiting_institution"].includes(c.status)) throw new CommandError(`Cannot raise a finding on a case that is ${c.status}`);
-              if (input.severity !== "info") {
-                for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id))) {
-                  if (inst.status === "submitted") moveInstrument(d, inst, "under_verification", "startVerification", s.userId, now);
-                  if (inst.status === "under_verification") moveInstrument(d, inst, "discrepancy", "raiseFinding", s.userId, now);
-                }
+              // A finding is a review item, not an accusation: the instrument simply stays Under review.
+              for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id))) {
+                if (inst.status === "submitted") bringUnderReview(d, inst, s.userId, now);
               }
               return { entityType: "finding", entityId: id, institutionId: c.institutionId, summary: `${input.type.replace(/_/g, " ")} on ${c.ref}: ${input.description.trim()}`, payload: { severity: input.severity, caseRef: c.ref } };
             },
@@ -424,6 +433,10 @@ export const useDemoStore = create<DemoState>()(
                 assertTransition("finding", findingMachine, f.status, "correction_requested");
                 f.status = "correction_requested";
               }
+              for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id))) {
+                if (inst.status === "submitted") bringUnderReview(d, inst, s.userId, now);
+                if (inst.status === "under_review") moveInstrument(d, inst, "needs_correction", "requestCorrection", s.userId, now);
+              }
               notify(d, { recipientRole: null, institutionId: c.institutionId, severity: "warning", title: `Correction requested on ${c.ref}`, body: input.message.trim(), href: "/institution/deposits" }, now);
               return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `Requested correction on ${c.ref}: ${input.message.trim()}`, payload: { findings: targets.length } };
             },
@@ -439,9 +452,17 @@ export const useDemoStore = create<DemoState>()(
             (d, now, s) => {
               const clr = must(d.clearances.find((x) => x.id === input.clearanceId), "Clearance");
               const rr = must(d.releaseRequests.find((r) => r.id === clr.releaseRequestId), "Release request");
+              // Brief §2.1: a clearance officer records only clearances assigned to them.
+              if (clr.assignedTo !== s.userId) throw new CommandError("This clearance is not assigned to you");
+              const reference = input.reference?.trim() ?? "";
+              const remarks = input.remarks.trim();
+              // Brief §7.4: Cleared needs a reference; every other outcome needs a reason.
+              if (input.outcome === "cleared" && !reference) throw new CommandError("A clearance reference is required");
+              if (input.outcome !== "cleared" && !remarks) throw new CommandError("A reason is required for this outcome");
               assertTransition("clearance", clearanceMachine, clr.status, input.outcome);
               clr.status = input.outcome;
-              clr.remarks = input.remarks.trim() || null;
+              clr.reference = reference || null;
+              clr.remarks = remarks || null;
               clr.recordedBy = s.userId;
               clr.recordedAt = now;
 
@@ -460,17 +481,16 @@ export const useDemoStore = create<DemoState>()(
 
               const c = must(d.cases.find((x) => x.id === rr.caseId), "Case");
               if (all.every((x) => x.status === "cleared" || x.status === "not_applicable")) {
-                if (rr.status === "submitted") rr.status = "under_review";
-                if (rr.status === "under_review") rr.status = "pending_clearance";
-                assertTransition("release", releaseMachine, rr.status, "clearances_complete");
-                rr.status = "clearances_complete";
+                assertTransition("release", releaseMachine, rr.status, "ready_for_decision");
+                d.workflowEvents.push({ id: newId("wf"), entityType: "release_request", entityId: rr.id, command: "clearancesComplete", from: rr.status, to: "ready_for_decision", actorId: s.userId, at: now });
+                rr.status = "ready_for_decision";
                 if (c.status === "open") moveCase(d, c, "in_review", "startReview", s.userId, now);
                 if (c.status === "in_review") moveCase(d, c, "ready_for_decision", "clearancesComplete", s.userId, now);
-                notify(d, { recipientRole: "approver", institutionId: null, severity: "info", title: `${c.ref} is ready for decision`, body: `All clearances recorded for ${rr.ref}.`, href: "/official/decisions" }, now);
-              } else if (input.outcome === "objection") {
-                notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "critical", title: `Objection on ${rr.ref}`, body: `${CLEARANCE_DEPARTMENT_LABELS[clr.department]}: ${clr.remarks ?? "no remarks"}`, href: "/official/releases" }, now);
+                notify(d, { recipientRole: "approver", institutionId: null, severity: "info", title: `${c.ref} is ready for authorised decision`, body: `All clearances recorded for ${rr.ref}.`, href: "/official/decisions" }, now);
+              } else if (input.outcome === "not_cleared" || input.outcome === "error_unavailable") {
+                notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "critical", title: `${STATUS_META[input.outcome].label}: ${rr.ref}`, body: `${CLEARANCE_DEPARTMENT_LABELS[clr.department]}: ${clr.remarks ?? "no reason recorded"}`, href: "/official/releases" }, now);
               }
-              return { entityType: "clearance", entityId: clr.id, institutionId: rr.institutionId, summary: `${CLEARANCE_DEPARTMENT_LABELS[clr.department]} recorded ${input.outcome.replace(/_/g, " ")} on ${rr.ref}`, payload: { outcome: input.outcome, department: clr.department } };
+              return { entityType: "clearance", entityId: clr.id, institutionId: rr.institutionId, summary: `${CLEARANCE_DEPARTMENT_LABELS[clr.department]} recorded ${input.outcome.replace(/_/g, " ")} on ${rr.ref}`, payload: { outcome: input.outcome, department: clr.department, reference: clr.reference } };
             },
           ),
 
@@ -497,26 +517,25 @@ export const useDemoStore = create<DemoState>()(
                 rr.decidedAt = now;
                 const ob = d.obligations.find((o) => o.id === rr.obligationId);
                 if (input.decision === "approved") {
-                  assertTransition("release", releaseMachine, rr.status, "released");
-                  rr.status = "released";
+                  // Records the decision only. Never releases money or generates an official NOC (brief §7.3.8).
                   for (const inst of insts) moveInstrument(d, inst, "released", "recordDecision", s.userId, now);
                   if (ob && canTransition(obligationMachine, ob.status, "discharged")) ob.status = "discharged";
                 } else {
-                  for (const inst of insts) moveInstrument(d, inst, "verified", "recordDecision", s.userId, now);
+                  for (const inst of insts) moveInstrument(d, inst, "active", "recordDecision", s.userId, now);
                   if (ob && canTransition(obligationMachine, ob.status, "secured")) ob.status = "secured";
                 }
               } else if (input.decision === "approved") {
-                for (const inst of insts.filter((i) => i.status !== "verified" && i.status !== "renewed")) {
+                for (const inst of insts.filter((i) => i.status !== "active" && i.status !== "replaced")) {
                   verifyInstrument(d, inst, s.userId, now);
                   const pred = d.instruments.find((p) => p.id === inst.predecessorInstrumentId);
-                  if (c.type === "renewal" && pred && pred.status === "verified") {
-                    moveInstrument(d, pred, "renewed", "recordDecision", s.userId, now);
+                  if (c.type === "renewal" && pred && pred.status === "active") {
+                    moveInstrument(d, pred, "replaced", "recordDecision", s.userId, now);
                     d.renewals.push({ id: newId("rn"), institutionId: inst.institutionId, predecessorInstrumentId: pred.id, successorInstrumentId: inst.id, renewedAt: now, recordedBy: s.userId });
                   }
                 }
               } else {
-                for (const inst of insts.filter((i) => i.status !== "verified" && i.status !== "renewed")) {
-                  if (inst.status === "submitted") moveInstrument(d, inst, "under_verification", "startVerification", s.userId, now);
+                for (const inst of insts.filter((i) => i.status !== "active" && i.status !== "replaced")) {
+                  if (inst.status === "submitted") bringUnderReview(d, inst, s.userId, now);
                   moveInstrument(d, inst, "rejected", "recordDecision", s.userId, now);
                 }
               }
@@ -532,7 +551,7 @@ export const useDemoStore = create<DemoState>()(
             (d) => d.instruments.find((i) => i.id === input.predecessorId)?.institutionId,
             (d, now, s) => {
               const pred = must(d.instruments.find((i) => i.id === input.predecessorId), "Instrument");
-              if (pred.status !== "verified") throw new CommandError(`Only a verified instrument can be renewed (this one is ${pred.status})`);
+              if (pred.status !== "active") throw new CommandError(`Only an active instrument can be renewed (this one is ${pred.status})`);
               if (d.instruments.some((i) => i.predecessorInstrumentId === pred.id && i.status !== "rejected")) throw new CommandError("A renewal is already in progress");
               if (!input.instrumentNo.trim()) throw new CommandError("Instrument number is required");
               if (!Number.isInteger(input.amountPaise) || input.amountPaise < pred.amountPaise) throw new CommandError("Renewal amount must be at least the current amount");
@@ -577,8 +596,8 @@ export const useDemoStore = create<DemoState>()(
     },
     {
       name: "fdr-sentinel-demo",
-      // v2: case decisions + brief clearance sources. Older persisted data is discarded and reseeded.
-      version: 2,
+      // v3: brief §7.2–7.4 status vocabularies. Older persisted data is discarded and reseeded.
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ data: s.data, session: s.session }),
       // Rehydrated manually by <DemoProvider> so server and first client render match.

@@ -16,7 +16,7 @@ export default function RenewalsPage() {
   const instId = session?.institutionId;
 
   const mine = useMemo(() => d.instruments.filter((i) => i.institutionId === instId), [d, instId]);
-  const dated = useMemo(() => mine.filter((i) => i.maturityDate && i.status === "verified"), [mine]);
+  const dated = useMemo(() => mine.filter((i) => i.maturityDate && i.status === "active"), [mine]);
   const near = dated.filter((i) => instrumentDisplayStatus(i, today) === "near_maturity").length;
   const matured = dated.filter((i) => instrumentDisplayStatus(i, today) === "matured").length;
   const renewals = d.renewals.filter((r) => r.institutionId === instId);

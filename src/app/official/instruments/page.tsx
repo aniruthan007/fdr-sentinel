@@ -14,7 +14,7 @@ export default function InstrumentsPage() {
   const d = useDemoData();
   const today = useToday();
   const columns = useMemo(() => instrumentColumns(d, today, { institution: true }), [d, today]);
-  const verified = d.instruments.filter((i) => i.status === "verified");
+  const active = d.instruments.filter((i) => i.status === "active");
 
   return (
     <PortalPage
@@ -22,8 +22,8 @@ export default function InstrumentsPage() {
       stats={
         <>
           <StatCard label="Instruments" value={d.instruments.length} hint="FDR · RPGF · RTGS, with history" icon={FileStack} />
-          <StatCard label="Verified value" value={<MoneyText paise={verified.reduce((s, i) => s + i.amountPaise, 0)} compact />} hint={`${verified.length} verified`} icon={Landmark} />
-          <StatCard label="Discrepancies" value={d.instruments.filter((i) => i.status === "discrepancy").length} icon={TriangleAlert} tone="danger" />
+          <StatCard label="Active value" value={<MoneyText paise={active.reduce((s, i) => s + i.amountPaise, 0)} compact />} hint={`${active.length} active`} icon={Landmark} />
+          <StatCard label="Needs correction" value={d.instruments.filter((i) => i.status === "needs_correction").length} icon={TriangleAlert} tone="warning" />
           <StatCard label="Near maturity" value={d.instruments.filter((i) => instrumentDisplayStatus(i, today) === "near_maturity").length} icon={CalendarClock} tone="warning" />
         </>
       }

@@ -15,7 +15,7 @@ export default function MaturityPage() {
   const columns = useMemo(() => instrumentColumns(d, today, { institution: true }), [d, today]);
 
   const inWindow = useMemo(
-    () => d.instruments.filter((i) => i.status === "verified" && i.maturityDate && daysBetween(today, i.maturityDate) <= 90),
+    () => d.instruments.filter((i) => i.status === "active" && i.maturityDate && daysBetween(today, i.maturityDate) <= 90),
     [d, today],
   );
   const band = (lo: number, hi: number) =>

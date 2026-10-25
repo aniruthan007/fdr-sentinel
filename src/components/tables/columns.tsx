@@ -71,7 +71,7 @@ export function instrumentColumns(d: DemoData, today: ISODate, opts: { instituti
       id: "maturity",
       header: "Maturity",
       accessorFn: (r) => r.maturityDate ?? "9999-12-31",
-      cell: ({ row }) => <DateText date={row.original.maturityDate} relative={row.original.status === "verified"} />,
+      cell: ({ row }) => <DateText date={row.original.maturityDate} relative={row.original.status === "active"} />,
     },
     {
       id: "status",
@@ -103,11 +103,11 @@ export function obligationColumns(d: DemoData): ColumnDef<DepositObligation>[] {
     { id: "required", header: "Required", accessorFn: (r) => r.requiredPaise, cell: ({ row }) => <MoneyText paise={row.original.requiredPaise} /> },
     {
       id: "covered",
-      header: "Verified cover",
-      accessorFn: (r) => d.instruments.filter((i) => i.obligationId === r.id && i.status === "verified").reduce((s, i) => s + i.amountPaise, 0),
+      header: "Active cover",
+      accessorFn: (r) => d.instruments.filter((i) => i.obligationId === r.id && i.status === "active").reduce((s, i) => s + i.amountPaise, 0),
       cell: ({ getValue }) => <MoneyText paise={getValue() as number} />,
     },
-    { id: "instruments", header: "Instruments", accessorFn: (r) => d.instruments.filter((i) => i.obligationId === r.id && i.status !== "renewed").length, cell: ({ getValue }) => <span className="tabular">{getValue() as number}</span> },
+    { id: "instruments", header: "Instruments", accessorFn: (r) => d.instruments.filter((i) => i.obligationId === r.id && i.status !== "replaced").length, cell: ({ getValue }) => <span className="tabular">{getValue() as number}</span> },
     { id: "status", header: "Status", accessorFn: (r) => r.status, cell: ({ row }) => <StatusBadge status={row.original.status} /> },
   ];
 }
@@ -148,7 +148,7 @@ export function releaseColumns(d: DemoData, opts: { institution?: boolean } = { 
       header: "Clearances",
       accessorFn: (r) => {
         const all = d.clearances.filter((c) => c.releaseRequestId === r.id);
-        return `${all.filter((c) => c.status === "cleared" || c.status === "not_applicable").length} / ${all.length}`;
+        return `${all.filter((c) => c.status === "cleared" || c.status === "not_applicable").length} / ${all.length}`
       },
       cell: ({ getValue }) => <span className="font-mono tabular text-sm">{getValue() as string}</span>,
     },
@@ -220,7 +220,7 @@ export function institutionColumns(d: DemoData): ColumnDef<Institution>[] {
     },
     { id: "ref", header: "Reference", accessorFn: (r) => r.refCode, cell: ({ row }) => <IdText value={row.original.refCode} /> },
     { id: "required", header: "Required", accessorFn: (r) => d.obligations.filter((o) => o.institutionId === r.id && o.status !== "discharged").reduce((s, o) => s + o.requiredPaise, 0), cell: ({ getValue }) => <MoneyText paise={getValue() as number} compact /> },
-    { id: "covered", header: "Verified cover", accessorFn: (r) => d.instruments.filter((i) => i.institutionId === r.id && i.status === "verified").reduce((s, i) => s + i.amountPaise, 0), cell: ({ getValue }) => <MoneyText paise={getValue() as number} compact /> },
+    { id: "covered", header: "Active cover", accessorFn: (r) => d.instruments.filter((i) => i.institutionId === r.id && i.status === "active").reduce((s, i) => s + i.amountPaise, 0), cell: ({ getValue }) => <MoneyText paise={getValue() as number} compact /> },
     { id: "openCases", header: "Open cases", accessorFn: (r) => d.cases.filter((c) => c.institutionId === r.id && !["approved", "rejected", "closed"].includes(c.status)).length, cell: ({ getValue }) => <span className="tabular">{getValue() as number}</span> },
   ];
 }

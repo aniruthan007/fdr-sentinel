@@ -21,7 +21,7 @@ export default function CasesPage() {
         <>
           <StatCard label="Open / in review" value={count("open") + count("in_review")} icon={CircleDot} />
           <StatCard label="Awaiting institution" value={count("awaiting_institution")} icon={Hourglass} tone="warning" />
-          <StatCard label="Ready for decision" value={count("ready_for_decision")} icon={Gavel} />
+          <StatCard label="Ready for authorised decision" value={count("ready_for_decision")} icon={Gavel} />
           <StatCard label="Unresolved findings" value={openFindings} icon={TriangleAlert} tone={openFindings ? "danger" : "default"} />
         </>
       }

@@ -12,19 +12,28 @@ export type ISOTimestamp = string;
 // ---------------------------------------------------------------------------
 
 /** Stored lifecycle state of an instrument. */
+/**
+ * Stored instrument states — brief §7.2. "Near maturity" and "Matured" (also §7.2) are derived from an
+ * Active instrument's maturity date by `instrumentDisplayStatus`. Active/Verified are only ever set by an
+ * explicit command, never inferred from a future maturity date or OCR success.
+ */
 export const INSTRUMENT_STATUSES = [
+  "draft",
   "submitted",
-  "under_verification",
-  "discrepancy",
+  "under_review",
+  "needs_correction",
   "verified",
-  "renewed",
+  "active",
+  "replaced",
   "release_requested",
   "released",
   "rejected",
+  "on_hold",
+  "archived",
 ] as const;
 export type InstrumentStatus = (typeof INSTRUMENT_STATUSES)[number];
 
-/** Derived from a verified instrument's maturity date, never stored. */
+/** Derived from an Active instrument's maturity date, never stored. */
 export type MaturityStatus = "near_maturity" | "matured";
 
 export const OBLIGATION_STATUSES = [
@@ -47,19 +56,33 @@ export const CASE_STATUSES = [
 ] as const;
 export type CaseStatus = (typeof CASE_STATUSES)[number];
 
+/** Release request states — brief §7.3. "Ready for authorised decision" is not approval. */
 export const RELEASE_STATUSES = [
   "draft",
   "submitted",
-  "under_review",
-  "pending_clearance",
-  "clearances_complete",
+  "completeness_review",
+  "in_verification",
+  "awaiting_clearances",
+  "awaiting_institution_response",
+  "ready_for_decision",
   "approved",
   "rejected",
-  "released",
+  "returned",
+  "on_hold",
+  "closed",
 ] as const;
 export type ReleaseStatus = (typeof RELEASE_STATUSES)[number];
 
-export const CLEARANCE_STATUSES = ["pending", "cleared", "objection", "not_applicable"] as const;
+/** Clearance states — brief §7.4. `error_unavailable` is never interpreted as cleared. */
+export const CLEARANCE_STATUSES = [
+  "not_requested",
+  "pending",
+  "further_info_required",
+  "cleared",
+  "not_cleared",
+  "not_applicable",
+  "error_unavailable",
+] as const;
 export type ClearanceStatus = (typeof CLEARANCE_STATUSES)[number];
 
 export const DOCUMENT_STATUSES = ["uploaded", "processing", "extracted", "confirmed"] as const;
@@ -264,8 +287,13 @@ export interface ClearanceRecord {
   /** Every external clearance source is a mock adapter in this prototype. */
   source: "SIMULATED";
   status: ClearanceStatus;
+  /** Clearance reference (required for Cleared, brief §7.4). */
+  reference: string | null;
+  /** Reason/remarks (required for Not cleared and Not applicable). */
   remarks: string | null;
-  requestedAt: ISOTimestamp;
+  /** Clearance officer assigned to this clearance; only they may record its outcome (brief §2.1). */
+  assignedTo: string | null;
+  requestedAt: ISOTimestamp | null;
   recordedBy: string | null;
   recordedAt: ISOTimestamp | null;
 }

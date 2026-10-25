@@ -44,15 +44,15 @@ export const INSTITUTION_NAV: NavItem[] = [
 export const OFFICIAL_NAV: NavItem[] = [
   { href: "/official", label: "Overview", icon: LayoutDashboard, group: "Workspace", roles: ALL_OFFICIAL, phase: 4, summary: "Your queue and what changed since you last looked." },
   { href: "/official/cases", label: "Verification cases", icon: ListChecks, group: "Workspace", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Deposit, renewal and release cases with findings and checklists." },
-  { href: "/official/releases", label: "Release requests", icon: Undo2, group: "Workspace", roles: ["processing_officer", "clearance_officer", "approver", "supervisor", "auditor"], phase: 4, summary: "Release requests reviewed against the Clause 6.46 checklist." },
-  { href: "/official/clearances", label: "Clearances", icon: ShieldCheck, group: "Workspace", roles: ["clearance_officer", "supervisor", "auditor"], phase: 4, summary: "Departmental clearances for release requests (SIMULATED sources)." },
+  { href: "/official/releases", label: "Release requests", icon: Undo2, group: "Workspace", roles: ["processing_officer", "approver", "supervisor", "auditor"], phase: 4, summary: "Release requests reviewed against the Clause 6.46 checklist." },
+  { href: "/official/clearances", label: "Clearances", icon: ShieldCheck, group: "Workspace", roles: ["clearance_officer", "supervisor", "auditor"], phase: 4, summary: "Clearance outcomes for release requests (SIMULATED sources). Clearance officers see only their assigned clearances." },
   { href: "/official/decisions", label: "Decisions", icon: Gavel, group: "Workspace", roles: ["approver", "supervisor", "auditor"], phase: 4, summary: "Cases ready for a recorded decision." },
   { href: "/official/instruments", label: "Instruments", icon: FileStack, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Every FDR, RPGF and RTGS instrument across institutions." },
-  { href: "/official/institutions", label: "Institutions", icon: Building2, group: "Records", roles: ALL_OFFICIAL, phase: 4, summary: "Institutions, their obligations and deposit coverage." },
+  { href: "/official/institutions", label: "Institutions", icon: Building2, group: "Records", roles: ["processing_officer", "approver", "supervisor", "auditor"], phase: 4, summary: "Institutions, their obligations and deposit coverage." },
   { href: "/official/maturity", label: "Maturity radar", icon: CalendarClock, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Instruments maturing in the next 90 days." },
-  { href: "/official/audit", label: "Audit log", icon: ScrollText, group: "Oversight", roles: ["auditor", "supervisor", "system_admin"], phase: 4, summary: "Tamper-evident, hash-chained record of every action." },
+  { href: "/official/audit", label: "Audit log", icon: ScrollText, group: "Oversight", roles: ["auditor"], phase: 4, summary: "Tamper-evident, hash-chained record of every action." },
   { href: "/official/reports", label: "Reports", icon: BarChart3, group: "Oversight", roles: ["auditor", "supervisor", "approver"], phase: 5, summary: "Coverage, maturity and turnaround reports with CSV export." },
-  { href: "/official/policy", label: "Policy & checklists", icon: BookCheck, group: "Oversight", roles: ["policy_admin", "supervisor", "auditor", "system_admin"], phase: 5, summary: "Versioned, source-linked rules and checklists." },
+  { href: "/official/policy", label: "Policy & checklists", icon: BookCheck, group: "Oversight", roles: ["policy_admin", "auditor"], phase: 5, summary: "Versioned, source-linked rules and checklists." },
   { href: "/official/notifications", label: "Notifications", icon: Bell, group: "Oversight", roles: ALL_OFFICIAL, phase: 5, summary: "Alerts routed to your role." },
 ];
 

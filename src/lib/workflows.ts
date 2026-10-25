@@ -13,15 +13,20 @@ import type {
  */
 type Machine<S extends string> = Record<S, readonly S[]>;
 
+/** Brief §7.2. Near maturity / Matured are derived from an Active instrument's date, not stored. */
 export const instrumentMachine: Machine<InstrumentStatus> = {
-  submitted: ["under_verification", "rejected"],
-  under_verification: ["discrepancy", "verified", "rejected"],
-  discrepancy: ["under_verification", "verified", "rejected"],
-  verified: ["renewed", "release_requested"],
-  release_requested: ["released", "verified"],
-  renewed: [],
-  released: [],
-  rejected: [],
+  draft: ["submitted"],
+  submitted: ["under_review", "rejected", "on_hold"],
+  under_review: ["needs_correction", "verified", "rejected", "on_hold"],
+  needs_correction: ["under_review", "rejected"],
+  verified: ["active"],
+  active: ["replaced", "release_requested", "on_hold"],
+  release_requested: ["released", "active", "on_hold"],
+  on_hold: ["under_review", "active"],
+  replaced: ["archived"],
+  released: ["archived"],
+  rejected: ["archived"],
+  archived: [],
 };
 
 export const caseMachine: Machine<CaseStatus> = {
@@ -34,21 +39,33 @@ export const caseMachine: Machine<CaseStatus> = {
   closed: [],
 };
 
+/**
+ * Brief §7.3: Draft → Submitted → Completeness review → In verification → Awaiting clearance(s) →
+ * Awaiting institution response → Ready for authorised decision → Approved / Rejected / Returned / On hold → Closed.
+ */
 export const releaseMachine: Machine<ReleaseStatus> = {
   draft: ["submitted"],
-  submitted: ["under_review"],
-  under_review: ["pending_clearance", "rejected"],
-  pending_clearance: ["clearances_complete", "rejected"],
-  clearances_complete: ["approved", "rejected"],
-  approved: ["released"],
-  rejected: [],
-  released: [],
+  submitted: ["completeness_review"],
+  completeness_review: ["in_verification", "awaiting_institution_response", "returned"],
+  in_verification: ["awaiting_clearances", "awaiting_institution_response", "ready_for_decision"],
+  awaiting_clearances: ["awaiting_institution_response", "ready_for_decision", "on_hold"],
+  awaiting_institution_response: ["completeness_review", "in_verification", "awaiting_clearances"],
+  ready_for_decision: ["approved", "rejected", "returned", "on_hold"],
+  approved: ["closed"],
+  rejected: ["closed"],
+  returned: ["submitted", "closed"],
+  on_hold: ["awaiting_clearances", "ready_for_decision", "closed"],
+  closed: [],
 };
 
+/** Brief §7.4. Error / unavailable can only go back to Pending — it is never treated as Cleared. */
 export const clearanceMachine: Machine<ClearanceStatus> = {
-  pending: ["cleared", "objection", "not_applicable"],
-  objection: ["cleared"],
+  not_requested: ["pending", "not_applicable"],
+  pending: ["further_info_required", "cleared", "not_cleared", "not_applicable", "error_unavailable"],
+  further_info_required: ["pending", "cleared", "not_cleared"],
+  error_unavailable: ["pending"],
   cleared: [],
+  not_cleared: [],
   not_applicable: [],
 };
 
