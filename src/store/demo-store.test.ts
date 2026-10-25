@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { verifyChain } from "@/lib/audit-chain";
+import { evidenceRows } from "@/lib/evidence";
 import { can } from "@/lib/authz";
 import { formatDate, todayIST } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
@@ -8,6 +9,10 @@ import { buildSeed } from "@/data/seed";
 import { useDemoStore } from "./demo-store";
 
 const store = () => useDemoStore.getState();
+const RELEASE_DOCS = [
+  { kind: "release_application" as const, fileName: "request-letter.pdf", sizeBytes: 120_000 },
+  { kind: "affidavit" as const, fileName: "affidavit-6.pdf", sizeBytes: 98_000 },
+];
 const data = () => store().data!;
 
 beforeEach(async () => {
@@ -146,7 +151,7 @@ describe("commands", () => {
 
   it("submits a release request with SIMULATED clearances", async () => {
     store().enterAs("u-owner");
-    const r = await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Test" });
+    const r = await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Test", attachments: RELEASE_DOCS, existingDocumentIds: ["doc-kit-loa"] });
     expect(r.ok).toBe(true);
     const rr = data().releaseRequests.at(-1)!;
     expect(rr.status).toBe("submitted");
@@ -215,7 +220,7 @@ describe("commands", () => {
 
   it("runs a new release request through completeness review to requested clearances", async () => {
     store().enterAs("u-owner");
-    const r = await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Programme closed" });
+    const r = await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Programme closed", attachments: RELEASE_DOCS, existingDocumentIds: ["doc-kit-loa"] });
     expect(r.ok).toBe(true);
     const rr = data().releaseRequests.at(-1)!;
     store().enterAs("u-po");
@@ -245,6 +250,81 @@ describe("commands", () => {
     expect(d.obligations.find((o) => o.id === "ob-kit-prog")!.status).toBe("discharged");
     expect(d.notifications.some((n) => n.institutionId === "inst-kit" && n.title === "RR-2026-0027 approved (ref. DC/REL/2026/0027)")).toBe(true);
     expect((await verifyChain(d.audit)).ok).toBe(true);
+  });
+
+  it("refuses a release request without the brief §7.3.3 documents or with a non-active instrument", async () => {
+    store().enterAs("u-owner");
+    const noDocs = await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "x" });
+    expect(noDocs).toMatchObject({ ok: false });
+    expect(noDocs.ok ? "" : noDocs.error).toContain("Release request letter");
+    expect((await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-06"], reason: "x", attachments: RELEASE_DOCS, existingDocumentIds: ["doc-kit-loa"] })).ok).toBe(false);
+  });
+
+  it("links new release documents to the case for the officer's checklist", async () => {
+    store().enterAs("u-owner");
+    expect((await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Closure", attachments: RELEASE_DOCS, existingDocumentIds: ["doc-kit-loa"] })).ok).toBe(true);
+    const rr = data().releaseRequests.at(-1)!;
+    const kinds = data().documents.filter((x) => x.caseId === rr.caseId).map((x) => x.kind).sort();
+    expect(kinds).toEqual(["affidavit", "letter_of_approval", "release_application"]);
+  });
+
+  it("closes the mismatch loop: correction requested → institution responds → officer sees a match", async () => {
+    store().enterAs("u-po");
+    expect((await store().requestCorrection({ caseId: "vc-01", message: "Upload the corrected receipt" })).ok).toBe(true);
+    expect(data().instruments.find((i) => i.id === "fdr-kit-05")!.status).toBe("needs_correction");
+
+    store().enterAs("u-owner");
+    expect((await store().respondToCorrection({ caseId: "vc-01", message: "", attachments: [] })).ok).toBe(false);
+    const r = await store().respondToCorrection({ caseId: "vc-01", message: "Bank reissued the receipt", attachments: [{ kind: "fdr_receipt", fileName: "NGB-7731045-corrected.pdf", sizeBytes: 150_000 }] });
+    expect(r.ok).toBe(true);
+    expect(data().cases.find((c) => c.id === "vc-01")!.status).toBe("in_review");
+    expect(data().instruments.find((i) => i.id === "fdr-kit-05")!.status).toBe("under_review");
+
+    const inst = data().instruments.find((i) => i.id === "fdr-kit-05")!;
+    const rows = evidenceRows(data(), inst);
+    expect(rows.filter((x) => x.differs)).toHaveLength(0);
+    expect(rows.every((x) => x.extraction?.source === "SIMULATED")).toBe(true);
+  });
+
+  it("an institution cannot respond on another institution's case", async () => {
+    store().enterAs("u-owner");
+    expect((await store().respondToCorrection({ caseId: "vc-03", message: "x", attachments: [{ kind: "affidavit", fileName: "a.pdf", sizeBytes: 1 }] })).ok).toBe(false);
+  });
+
+  it("renewal with a receipt gets a SIMULATED extraction on the successor", async () => {
+    store().enterAs("u-owner");
+    const today = todayIST();
+    const r = await store().renewInstrument({
+      predecessorId: "fdr-kit-03",
+      instrumentNo: "DMB/FD/2026/400001",
+      amountPaise: 50_00_000_00,
+      issueDate: today,
+      maturityDate: `${Number(today.slice(0, 4)) + 1}${today.slice(4)}`,
+      receipt: { kind: "fdr_receipt", fileName: "DMB-FD-2026-400001.pdf", sizeBytes: 160_000 },
+    });
+    expect(r.ok).toBe(true);
+    const doc = data().documents.find((x) => x.instrumentId === (r.ok ? r.id : ""))!;
+    expect(doc.status).toBe("extracted");
+    expect(data().extractions.filter((e) => e.documentId === doc.id)).toHaveLength(7);
+  });
+
+  it("a partial release keeps the obligation secured by what remains", async () => {
+    store().enterAs("u-owner");
+    expect((await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Partial", attachments: RELEASE_DOCS, existingDocumentIds: ["doc-kit-loa"] })).ok).toBe(true);
+    const rr = data().releaseRequests.at(-1)!;
+    store().enterAs("u-po");
+    for (const item of data().checklistItems.filter((i) => i.caseId === rr.caseId && !["req-646-05", "req-646-06"].includes(i.requirementId))) {
+      await store().recordChecklistOutcome({ itemId: item.id, outcome: "satisfied" });
+    }
+    expect((await store().requestClearances({ releaseRequestId: rr.id })).ok).toBe(true);
+    store().enterAs("u-co");
+    for (const c of data().clearances.filter((x) => x.releaseRequestId === rr.id)) {
+      await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: "R/1", remarks: "" });
+    }
+    store().enterAs("u-ap");
+    expect((await store().recordDecision({ caseId: rr.caseId, decision: "approved", reason: "ok", referenceNo: "DC/REL/1" })).ok).toBe(true);
+    // fdr-kit-03 (₹50 L) still stands against the ₹1.25 Cr establishment obligation.
+    expect(data().obligations.find((o) => o.id === "ob-kit-est")!.status).toBe("partially_secured");
   });
 
   it("detects tampering in the audit chain", async () => {

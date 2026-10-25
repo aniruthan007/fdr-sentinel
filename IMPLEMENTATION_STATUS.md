@@ -2,6 +2,40 @@
 
 Build order: 1 → 2 → **4** → 3 (Official Portal before Institution Portal, by request).
 
+## Phase 3 — Institution Portal ✅
+
+**Done**
+- Store: `submitReleaseRequest` now requires the brief §7.3.3 documents (request letter, Affidavit 6,
+  FDR receipt on file, latest LoA/EoA) and only active instruments; new `respondToCorrection` (owner or
+  operator; attaches the corrected document and returns the case to the officer); `renewInstrument` takes
+  the renewed receipt; uploaded FDR receipts get **SIMULATED** extraction (labelled, never verification).
+  Evidence compares the latest receipt; older ones stay as history.
+- Overview: "Needs your attention" (correction requests with the officer's message, flagged FDRs, fields
+  to confirm, renewals due, open releases), deposit cover per obligation, recent activity.
+- Deposit register with cover bars; instrument page with renewal lineage, evidence viewer + field
+  confirmation, review status, Respond to correction, Renew, history.
+- Document centre: upload (file name and size only — contents never leave the browser; "Use a sample
+  file" for judges), open any document in the evidence viewer.
+- Release wizard (instruments → Clause 6.46 documents → review + declaration) and request timeline
+  (§7.3 stepper, what happens next, clearances, checklist, decision, hash-chained history).
+- Renewals: renew from the table, renewals under review, every lineage chain.
+- Fixed: a partial release no longer discharges the whole obligation (recomputes cover instead).
+
+**Verified in the browser (fresh seed)**
+- Full institution-submit flow: Owner submitted RR-2026-0028 via the wizard (sample files + LoA on file)
+  → Processing Officer recorded 6.46-01…04 (each dialog pre-selected the matching document) and
+  requested clearances → Clearance Officer cleared all four with references → Approver approved with the
+  suggested DC/REL/2026/0028 → Owner's timeline shows Approved, the decision and every step #28–#38.
+- Correction loop: officer requested correction on VC-2026-0141 → owner saw it on the overview with the
+  officer's message → responded with a corrected receipt → case back to In review.
+- Renewal: DMB/FD/2025/341177 renewed with a receipt → successor submitted, linked, 7 SIMULATED fields.
+- Data isolation: KIT gets "not found" for another institution's instrument and release request.
+- 375px: no horizontal overflow on any institution page; no console errors. `pnpm test` 30/30.
+
+**Known gaps**
+- Registering a brand-new obligation/instrument (first submission) is not in the Phase 3 scope.
+- Operators cannot be granted submit permission (the brief's optional grant is not modelled).
+
 ## Phase 4 — Official Operations Portal ✅
 
 **Done**
@@ -38,7 +72,7 @@ Build order: 1 → 2 → **4** → 3 (Official Portal before Institution Portal,
 - Decision options are Approve / Reject; the brief's Return and On hold exist in the release state
   machine but have no UI yet.
 - Clearances are assigned to the single demo clearance officer; supervisor allocation UI is not built.
-- The institution-submit release flow is exercised by tests only until Phase 3 builds the wizard.
+- (Resolved in Phase 3: the institution-submit release flow now has its wizard.)
 
 ## Phase 2 — Landing page ✅
 
@@ -101,4 +135,4 @@ Build order: 1 → 2 → **4** → 3 (Official Portal before Institution Portal,
 - No UI calls the store commands yet — they are exercised by tests; Phase 3/4 screens wire them up.
 
 **Next step**
-- Phase 3: Institution Portal — overview, deposit register + lineage, document centre, release wizard, request timeline.
+- Phase 5: ⌘K palette, polish, mobile check, Lighthouse, final deploy, README.

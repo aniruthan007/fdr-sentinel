@@ -49,4 +49,5 @@ export type Action =
   | "recordChecklistOutcome"
   | "markReadyForDecision"
   | "requestClearances"
+  | "respondToCorrection"
   | "resetDemo";

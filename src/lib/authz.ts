@@ -35,12 +35,15 @@ const MATRIX: Record<Action, readonly Role[]> = {
   recordChecklistOutcome: ["processing_officer"],
   markReadyForDecision: ["processing_officer"],
   requestClearances: ["processing_officer"],
+  // Brief §2.1: owners and operators both respond to queries.
+  respondToCorrection: ["institution_owner", "institution_operator"],
   resetDemo: [...INSTITUTION_ROLES, ...OFFICIAL_ROLES],
 };
 
 /** Actions an institution user may only perform on their own institution's records. */
 const INSTITUTION_SCOPED: ReadonlySet<Action> = new Set<Action>([
   "submitReleaseRequest",
+  "respondToCorrection",
   "uploadDocument",
   "confirmField",
   "renewInstrument",

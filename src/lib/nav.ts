@@ -75,4 +75,4 @@ export function navItemFor(pathname: string): NavItem | undefined {
 }
 
 /** Roadmap phases (CLAUDE.md §8) whose screens are fully built; other pages show a "coming in Phase N" note. */
-export const COMPLETED_PHASES: ReadonlySet<number> = new Set([1, 2, 4]);
+export const COMPLETED_PHASES: ReadonlySet<number> = new Set([1, 2, 3, 4]);

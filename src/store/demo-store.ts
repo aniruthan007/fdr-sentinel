@@ -21,6 +21,7 @@ import {
 import { DEMO_USERS } from "@/data/people";
 import { buildSeed, type DemoData } from "@/data/seed";
 import { CLEARANCE_DEPARTMENTS, CLEARANCE_DEPARTMENT_LABELS } from "@/data/releases";
+import { DOCUMENT_KIND_LABELS, RECEIPT_LAYOUT } from "@/data/documents";
 import type {
   Action,
   AuditDraft,
@@ -30,6 +31,7 @@ import type {
   ClearanceDepartment,
   ClearanceStatus,
   DocumentKind,
+  DocumentRecord,
   EntityType,
   ExtractionField,
   FinancialInstrument,
@@ -49,9 +51,25 @@ export type ActionResult = { ok: true; id?: string } | { ok: false; error: strin
 // Command inputs
 // ---------------------------------------------------------------------------
 
+/** A file the user picked. Only its name and size are kept — the bytes never leave the browser. */
+export interface Attachment {
+  kind: DocumentKind;
+  fileName: string;
+  sizeBytes: number;
+  pages?: number;
+}
 export interface SubmitReleaseRequestInput {
   instrumentIds: string[];
   reason: string;
+  /** Newly attached Clause 6.46 documents. */
+  attachments?: Attachment[];
+  /** Documents already on file (e.g. the latest LoA/EoA) to include. */
+  existingDocumentIds?: string[];
+}
+export interface RespondToCorrectionInput {
+  caseId: string;
+  message: string;
+  attachments: Attachment[];
 }
 export interface UploadDocumentInput {
   institutionId: string;
@@ -126,6 +144,8 @@ export interface RenewInstrumentInput {
   issueDate: ISODate;
   maturityDate: ISODate;
   bankName?: string;
+  /** Receipt of the renewed instrument (Annexure-2). */
+  receipt?: Attachment;
 }
 
 interface DemoState {
@@ -151,6 +171,7 @@ interface DemoState {
   recordChecklistOutcome: (input: RecordChecklistOutcomeInput) => Promise<ActionResult>;
   markReadyForDecision: (input: MarkReadyInput) => Promise<ActionResult>;
   requestClearances: (input: RequestClearancesInput) => Promise<ActionResult>;
+  respondToCorrection: (input: RespondToCorrectionInput) => Promise<ActionResult>;
   resetDemo: () => Promise<ActionResult>;
 }
 
@@ -247,6 +268,68 @@ function notify(d: DemoData, n: Omit<DemoData["notifications"][number], "id" | "
   d.notifications.push({ ...n, id: newId("nt"), createdAt: now, readAt: null });
 }
 
+/**
+ * SIMULATED extraction for a newly uploaded FDR receipt. There is no OCR in this prototype: the "extractor"
+ * reads back the institution's declared values with plausible confidences, labelled SIMULATED, so the
+ * evidence and discrepancy screens work end to end. Seeded documents use PRECOMPUTED extractions instead.
+ */
+function simulateExtraction(d: DemoData, doc: DocumentRecord, inst: FinancialInstrument) {
+  const institution = d.institutions.find((i) => i.id === inst.institutionId);
+  const values: Record<ExtractionField, string> = {
+    bank_name: inst.bankName,
+    instrument_no: inst.instrumentNo,
+    beneficiary: institution?.name ?? "",
+    amount: (inst.amountPaise / 100).toFixed(2),
+    issue_date: inst.issueDate,
+    maturity_date: inst.maturityDate ?? "",
+    lien_holder: inst.lienHolder,
+  };
+  const seed = [...doc.id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  (Object.keys(RECEIPT_LAYOUT) as ExtractionField[]).forEach((field, i) => {
+    d.extractions.push({
+      id: newId("ext"),
+      documentId: doc.id,
+      field,
+      value: values[field],
+      confidence: (86 + ((seed + i * 7) % 13)) / 100,
+      page: 1,
+      bbox: RECEIPT_LAYOUT[field],
+      source: "SIMULATED",
+      confirmedBy: null,
+      confirmedAt: null,
+    });
+  });
+  doc.status = "extracted";
+}
+
+/** Records an attached file as a document; FDR receipts get SIMULATED extraction. */
+function attach(
+  d: DemoData,
+  a: Attachment,
+  link: { institutionId: string; instrumentId: string | null; caseId: string | null },
+  actorId: string,
+  now: ISOTimestamp,
+): DocumentRecord {
+  if (!a.fileName.trim()) throw new CommandError("Every attachment needs a file name");
+  const doc: DocumentRecord = {
+    id: newId("doc"),
+    institutionId: link.institutionId,
+    instrumentId: link.instrumentId,
+    caseId: link.caseId,
+    kind: a.kind,
+    fileName: a.fileName.trim(),
+    pages: a.pages ?? 1,
+    sizeBytes: a.sizeBytes,
+    status: "uploaded",
+    uploadedBy: actorId,
+    uploadedAt: now,
+  };
+  d.documents.push(doc);
+  const inst = link.instrumentId ? d.instruments.find((i) => i.id === link.instrumentId) : undefined;
+  if (a.kind === "fdr_receipt" && inst) simulateExtraction(d, doc, inst);
+  return doc;
+}
+
 interface Effect {
   entityType: EntityType;
   entityId: string;
@@ -271,6 +354,7 @@ const AUDIT_ACTION: Record<Action, string> = {
   recordChecklistOutcome: "checklist.recorded",
   markReadyForDecision: "case.ready_for_decision",
   requestClearances: "clearances.requested",
+  respondToCorrection: "correction.submitted",
   resetDemo: "demo.reset",
 };
 
@@ -376,6 +460,18 @@ export const useDemoStore = create<DemoState>()(
               if (insts.some((i) => i.institutionId !== institutionId || i.obligationId !== obligationId)) {
                 throw new CommandError("All instruments must secure the same obligation");
               }
+              for (const inst of insts) {
+                if (inst.status !== "active") throw new CommandError(`${inst.instrumentNo} is ${inst.status.replace(/_/g, " ")}; only active instruments can be released`);
+              }
+              // Brief §7.3.3: request letter, Affidavit 6, FDR/payment evidence and the latest LoA/EoA.
+              const attachments = input.attachments ?? [];
+              const existing = (input.existingDocumentIds ?? []).map((id) => must(d.documents.find((x) => x.id === id && x.institutionId === institutionId), "Document"));
+              const kinds = new Set([...attachments.map((a) => a.kind), ...existing.map((x) => x.kind)]);
+              const missing = (["release_application", "affidavit", "letter_of_approval"] as const).filter((k) => !kinds.has(k));
+              if (missing.length) throw new CommandError(`Attach the ${missing.map((k) => DOCUMENT_KIND_LABELS[k]).join(", ")}`);
+              if (!insts.every((i) => d.documents.some((x) => x.instrumentId === i.id && x.kind === "fdr_receipt"))) {
+                throw new CommandError("Every instrument needs its FDR / payment receipt on file");
+              }
               const total = insts.reduce((sum, i) => sum + i.amountPaise, 0);
               const rrId = newId("rr");
               const ref = nextRef("RR", d.releaseRequests.map((r) => r.ref));
@@ -394,8 +490,11 @@ export const useDemoStore = create<DemoState>()(
                 d.clearances.push({ id: newId("clr"), releaseRequestId: rrId, department, source: "SIMULATED", status: "not_requested", reference: null, remarks: null, assignedTo: null, requestedAt: null, recordedBy: null, recordedAt: null });
               }
               addChecklist(d, c.id, "clause_6_46");
+              for (const a of attachments) attach(d, a, { institutionId, instrumentId: a.kind === "affidavit" ? insts[0].id : null, caseId: c.id }, s.userId, now);
+              // Documents already on file are linked to this case if they are not tied to another one.
+              for (const x of existing) if (!x.caseId) x.caseId = c.id;
               notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "info", title: `New release request ${ref}`, body: `${formatINR(total)} across ${insts.length} instrument(s).`, href: "/official/releases" }, now);
-              return { entityType: "release_request", entityId: rrId, institutionId, summary: `Submitted release request ${ref} for ${formatINR(total)}`, payload: { totalPaise: total, instruments: insts.length } };
+              return { entityType: "release_request", entityId: rrId, institutionId, summary: `Submitted release request ${ref} for ${formatINR(total)}`, payload: { totalPaise: total, instruments: insts.length, documents: attachments.length + existing.length } };
             },
           ),
 
@@ -406,11 +505,11 @@ export const useDemoStore = create<DemoState>()(
             (d, now, s) => {
               must(d.institutions.find((i) => i.id === input.institutionId), "Institution");
               if (!input.fileName.trim()) throw new CommandError("File name is required");
-              const id = newId("doc");
-              d.documents.push({
-                id, institutionId: input.institutionId, instrumentId: input.instrumentId ?? null, caseId: input.caseId ?? null,
-                kind: input.kind, fileName: input.fileName, pages: input.pages ?? 1, sizeBytes: input.sizeBytes, status: "uploaded", uploadedBy: s.userId, uploadedAt: now,
-              });
+              if (input.instrumentId) {
+                const inst = must(d.instruments.find((i) => i.id === input.instrumentId), "Instrument");
+                if (inst.institutionId !== input.institutionId) throw new CommandError("Instrument belongs to another institution");
+              }
+              const { id } = attach(d, input, { institutionId: input.institutionId, instrumentId: input.instrumentId ?? null, caseId: input.caseId ?? null }, s.userId, now);
               return { entityType: "document", entityId: id, institutionId: input.institutionId, summary: `Uploaded ${input.fileName}`, payload: { kind: input.kind, sizeBytes: input.sizeBytes } };
             },
           ),
@@ -558,7 +657,11 @@ export const useDemoStore = create<DemoState>()(
                 if (input.decision === "approved") {
                   // Records the decision only. Never releases money or generates an official NOC (brief §7.3.8).
                   for (const inst of insts) moveInstrument(d, inst, "released", "recordDecision", s.userId, now);
-                  if (ob && canTransition(obligationMachine, ob.status, "discharged")) ob.status = "discharged";
+                  // A partial release leaves the obligation secured by what remains; it is discharged only
+                  // when no instrument still stands against it.
+                  const remaining = d.instruments.some((i) => i.obligationId === rr.obligationId && ["active", "release_requested", "submitted", "under_review", "needs_correction", "verified"].includes(i.status));
+                  const target = remaining ? "secured" : "discharged";
+                  if (ob && canTransition(obligationMachine, ob.status, target)) ob.status = target;
                 } else {
                   for (const inst of insts) moveInstrument(d, inst, "active", "recordDecision", s.userId, now);
                   if (ob && canTransition(obligationMachine, ob.status, "secured")) ob.status = "secured";
@@ -604,6 +707,7 @@ export const useDemoStore = create<DemoState>()(
               d.workflowEvents.push({ id: newId("wf"), entityType: "instrument", entityId: id, command: "renewInstrument", from: null, to: "submitted", actorId: s.userId, at: now });
               const c = openCase(d, "renewal", `Renewal of ${pred.instrumentNo}`, pred.institutionId, [pred.id, id], now);
               addChecklist(d, c.id, "annexure_2");
+              if (input.receipt) attach(d, { ...input.receipt, kind: "fdr_receipt" }, { institutionId: pred.institutionId, instrumentId: id, caseId: c.id }, s.userId, now);
               notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "info", title: `Renewal submitted for ${pred.instrumentNo}`, body: `Successor ${input.instrumentNo.trim()} awaits verification (${c.ref}).`, href: "/official/cases" }, now);
               return { entityType: "instrument", entityId: id, institutionId: pred.institutionId, summary: `Submitted renewal ${input.instrumentNo.trim()} for ${pred.instrumentNo}`, payload: { predecessor: pred.id, amountPaise: input.amountPaise } };
             },
@@ -739,6 +843,27 @@ export const useDemoStore = create<DemoState>()(
               if (c.status === "open") moveCase(d, c, "in_review", "requestClearances", s.userId, now);
               notify(d, { recipientRole: "clearance_officer", institutionId: null, severity: "info", title: `${requested} clearance(s) requested on ${rr.ref}`, body: "Record each outcome with a reference.", href: "/official/clearances" }, now);
               return { entityType: "release_request", entityId: rr.id, institutionId: rr.institutionId, summary: `Requested ${requested} clearance(s) on ${rr.ref}`, payload: { requested } };
+            },
+          ),
+
+        respondToCorrection: (input) =>
+          command(
+            "respondToCorrection",
+            (d) => d.cases.find((c) => c.id === input.caseId)?.institutionId,
+            (d, now, s) => {
+              const c = must(d.cases.find((x) => x.id === input.caseId), "Case");
+              if (c.status !== "awaiting_institution") throw new CommandError("No correction has been requested on this case");
+              const message = input.message.trim();
+              if (!message) throw new CommandError("Add a short note for the officer");
+              if (input.attachments.length === 0) throw new CommandError("Attach the corrected document");
+              const primary = c.instrumentIds[c.instrumentIds.length - 1] ?? null;
+              for (const a of input.attachments) attach(d, a, { institutionId: c.institutionId, instrumentId: primary, caseId: c.id }, s.userId, now);
+              moveCase(d, c, "in_review", "respondToCorrection", s.userId, now);
+              for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id) && i.status === "needs_correction")) {
+                bringUnderReview(d, inst, s.userId, now);
+              }
+              notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "info", title: `Correction received on ${c.ref}`, body: message, href: `/official/cases/${c.id}` }, now);
+              return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `Responded to the correction request on ${c.ref}: ${message}`, payload: { documents: input.attachments.length } };
             },
           ),
 

@@ -23,8 +23,14 @@ export function Breadcrumbs() {
   const detailId = item && pathname !== item.href ? segments.at(-1) : undefined;
   // Show the record's reference (VC-…, RR-…) rather than its internal id.
   const detailLabel = useDemoStore((s) => {
+    if (detailId === "new") return "New request";
     if (!detailId || !s.data) return detailId;
-    return s.data.cases.find((c) => c.id === detailId)?.ref ?? s.data.releaseRequests.find((r) => r.id === detailId)?.ref ?? detailId;
+    return (
+      s.data.cases.find((c) => c.id === detailId)?.ref ??
+      s.data.releaseRequests.find((r) => r.id === detailId)?.ref ??
+      s.data.instruments.find((i) => i.id === detailId)?.instrumentNo ??
+      detailId
+    );
   });
 
   return (

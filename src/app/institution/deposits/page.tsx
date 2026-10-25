@@ -1,17 +1,22 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { CircleDollarSign, FileStack, ShieldCheck, TriangleAlert } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { MoneyText } from "@/components/money-text";
 import { PortalPage, Section } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
-import { instrumentColumns, obligationColumns } from "@/components/tables/columns";
+import { ObligationCover } from "@/components/institution/obligation-cover";
+import { instrumentColumns } from "@/components/tables/columns";
 import { flaggedInstrumentIds } from "@/lib/selectors";
 import { useDemoData, useSession, useToday } from "@/store/hooks";
 
+const hrefFor = (i: { id: string }) => `/institution/deposits/${i.id}`;
+
 export default function DepositRegisterPage() {
   const d = useDemoData();
+  const router = useRouter();
   const session = useSession();
   const today = useToday();
   const instId = session?.institutionId;
@@ -22,8 +27,7 @@ export default function DepositRegisterPage() {
   const secured = obligations.filter((o) => o.status === "secured").length;
   const flaggedIds = flaggedInstrumentIds(d);
   const flagged = instruments.filter((i) => flaggedIds.has(i.id)).length;
-  const obCols = useMemo(() => obligationColumns(d), [d]);
-  const instCols = useMemo(() => instrumentColumns(d, today), [d, today]);
+  const instCols = useMemo(() => instrumentColumns(d, today, { href: hrefFor }), [d, today]);
 
   return (
     <PortalPage
@@ -38,10 +42,14 @@ export default function DepositRegisterPage() {
       }
     >
       <Section title="Obligations">
-        <DataTable columns={obCols} data={obligations} />
+        <div className="grid gap-3 md:grid-cols-3">
+          {obligations.map((o) => (
+            <ObligationCover key={o.id} data={d} obligation={o} />
+          ))}
+        </div>
       </Section>
       <Section title="All instruments">
-        <DataTable columns={instCols} data={instruments} searchPlaceholder="Search instrument no. or bank" />
+        <DataTable columns={instCols} data={instruments} searchPlaceholder="Search instrument no. or bank" onRowClick={(i) => router.push(hrefFor(i))} />
       </Section>
     </PortalPage>
   );

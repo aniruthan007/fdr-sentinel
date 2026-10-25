@@ -40,7 +40,10 @@ export interface EvidenceRow {
 
 /** Declared vs extracted vs on-record, one row per extracted field (CLAUDE.md §5.4). */
 export function evidenceRows(d: DemoData, inst: FinancialInstrument): EvidenceRow[] {
-  const receipt = d.documents.find((x) => x.instrumentId === inst.id && x.kind === "fdr_receipt");
+  // The latest receipt is compared; earlier ones stay on file as history.
+  const receipt = d.documents
+    .filter((x) => x.instrumentId === inst.id && x.kind === "fdr_receipt")
+    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
   const extractions = receipt ? d.extractions.filter((e) => e.documentId === receipt.id) : [];
   const institution = d.institutions.find((i) => i.id === inst.institutionId);
   const obligation = d.obligations.find((o) => o.id === inst.obligationId);

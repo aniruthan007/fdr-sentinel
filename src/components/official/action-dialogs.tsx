@@ -121,6 +121,19 @@ export function ResolveFindingDialog({ findingId, trigger }: Trigger & { finding
   );
 }
 
+/** The document kind that evidences each checklist item. */
+const EVIDENCE_KIND: Record<string, DocumentRecord["kind"]> = {
+  "A1-01": "fdr_receipt",
+  "A1-02": "affidavit",
+  "A1-03": "letter_of_approval",
+  "A2-01": "fdr_receipt",
+  "A2-02": "bank_confirmation",
+  "6.46-01": "release_application",
+  "6.46-02": "affidavit",
+  "6.46-03": "fdr_receipt",
+  "6.46-04": "letter_of_approval",
+};
+
 export function ChecklistOutcomeDialog({
   itemId,
   requirement,
@@ -141,7 +154,10 @@ export function ChecklistOutcomeDialog({
       onOpenChange={(o) => {
         if (!o) return;
         setOutcome("satisfied");
-        setEvidence(documents[0]?.id ?? "");
+        // Suggest the most recent document of the kind this requirement asks for.
+        const kind = EVIDENCE_KIND[requirement.code];
+        const match = [...documents].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)).find((d) => d.kind === kind);
+        setEvidence(match?.id ?? "");
         setNote("");
       }}
       canSubmit={outcome === "satisfied" || note.trim().length > 0}

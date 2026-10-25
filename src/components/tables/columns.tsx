@@ -61,7 +61,7 @@ export function userName(id: string | null): string {
   return demoUser(id)?.name ?? (id.startsWith("ext-") ? "Institution user" : id);
 }
 
-export function instrumentColumns(d: DemoData, today: ISODate, opts: { institution?: boolean } = {}): ColumnDef<FinancialInstrument>[] {
+export function instrumentColumns(d: DemoData, today: ISODate, opts: { institution?: boolean; href?: (i: FinancialInstrument) => string } = {}): ColumnDef<FinancialInstrument>[] {
   const cols: ColumnDef<FinancialInstrument>[] = [
     {
       id: "instrumentNo",
@@ -69,7 +69,7 @@ export function instrumentColumns(d: DemoData, today: ISODate, opts: { instituti
       accessorFn: (r) => `${r.instrumentNo} ${r.bankName}`,
       cell: ({ row: { original: r } }) => (
         <div className="min-w-0">
-          <IdText value={r.instrumentNo} />
+          {opts.href ? <RefLink href={opts.href(r)}>{r.instrumentNo}</RefLink> : <IdText value={r.instrumentNo} />}
           <p className="text-xs text-muted-foreground">
             {r.type} · {r.bankName}
           </p>
