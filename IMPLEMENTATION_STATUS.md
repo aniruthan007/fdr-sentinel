@@ -1,5 +1,25 @@
 # Implementation status
 
+## Phase 2 — Landing page ✅
+
+**Done** (`src/app/page.tsx`, `src/components/landing/*`)
+- Sticky nav (wordmark, Team Mavericks · SIH 2026, section links, theme toggle, Launch demo).
+- Hero with the animated lifecycle: one FDR card moves through all 10 states while each step stamps an
+  event into a real SHA-256 chain (Web Crypto, `src/lib/audit-chain.ts`). It loops, pauses on mouse hover
+  or keyboard focus, offers clickable steps and a play/pause control, pauses off-screen, and doesn't
+  auto-advance under reduced motion. "Watch the lifecycle" restarts it and scrolls to it.
+- Problem (4 pains), How it works (5 steps, scroll reveal), Capabilities (6 cards with UI fragments;
+  maturity radar, Clause 6.46 checklist and audit chain read the live demo store, and "Verify integrity"
+  re-hashes the whole chain), Guardrails, Architecture (SVG, separate desktop/mobile layouts, labelled
+  production target), live stats strip, final CTA, footer with disclaimer.
+
+**Verified**
+- 1440px and 375px in light and dark; no horizontal overflow at 375px; no console errors.
+- Lifecycle loop advances, wraps and holds a constant height (no layout shift); Verify integrity
+  reports 27 events intact.
+- Not verified in a real reduced-motion setting (the browser pane can't emulate it); the code path is
+  `useReducedMotion` → no auto-advance, plus the global reduced-motion CSS.
+
 ## Phase 1 — Foundation ✅
 
 **Done**
@@ -41,4 +61,4 @@
 - No UI calls the store commands yet — they are exercised by tests; Phase 3/4 screens wire them up.
 
 **Next step**
-- Phase 2: showcase landing page `/` with the animated lifecycle hero and problem → solution story.
+- Phase 3: Institution Portal — overview, deposit register + lineage, document centre, release wizard, request timeline.
