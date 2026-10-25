@@ -19,7 +19,7 @@ export default function InstitutionReleasesPage() {
   const open = requests.filter(isOpenRelease);
   const ids = new Set(requests.map((r) => r.id));
   const pending = d.clearances.filter((c) => ids.has(c.releaseRequestId) && ["pending", "further_info_required"].includes(c.status)).length;
-  const columns = useMemo(() => releaseColumns(d, { institution: false }), [d]);
+  const columns = useMemo(() => releaseColumns(d, { institution: false, link: false }), [d]);
 
   return (
     <PortalPage

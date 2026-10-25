@@ -28,6 +28,13 @@ const MATRIX: Record<Action, readonly Role[]> = {
   recordClearance: ["clearance_officer"],
   recordDecision: ["approver"],
   renewInstrument: ["institution_owner"],
+  // Processing Officer claims work, records checklist outcomes, resolves findings and recommends;
+  // a Supervisor may also allocate work (brief §2.1).
+  assignCase: ["processing_officer", "supervisor"],
+  resolveFinding: ["processing_officer"],
+  recordChecklistOutcome: ["processing_officer"],
+  markReadyForDecision: ["processing_officer"],
+  requestClearances: ["processing_officer"],
   resetDemo: [...INSTITUTION_ROLES, ...OFFICIAL_ROLES],
 };
 

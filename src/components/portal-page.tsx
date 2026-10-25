@@ -1,7 +1,7 @@
 "use client";
 
 import { Construction } from "lucide-react";
-import { navItemFor } from "@/lib/nav";
+import { COMPLETED_PHASES, navItemFor } from "@/lib/nav";
 import { PageHeader } from "./page-header";
 
 interface PortalPageProps {
@@ -23,7 +23,7 @@ export function PortalPage({ href, stats, actions, children }: PortalPageProps) 
       <PageHeader title={item?.label ?? ""} description={item?.summary} actions={actions} />
       {stats && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{stats}</div>}
       {children}
-      {item && (
+      {item && !COMPLETED_PHASES.has(item.phase) && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Construction className="size-3.5" aria-hidden />
           Counts and rows are live from the demo store. The full workspace for this page arrives in Phase {item.phase}.

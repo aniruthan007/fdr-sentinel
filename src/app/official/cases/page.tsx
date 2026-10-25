@@ -1,15 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { CircleDot, Gavel, Hourglass, TriangleAlert } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { PortalPage } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
-import { caseColumns } from "@/components/tables/columns";
+import { caseColumns, caseHref } from "@/components/tables/columns";
 import { useDemoData } from "@/store/hooks";
 
 export default function CasesPage() {
   const d = useDemoData();
+  const router = useRouter();
   const columns = useMemo(() => caseColumns(d), [d]);
   const count = (s: string) => d.cases.filter((c) => c.status === s).length;
   const openFindings = d.findings.filter((f) => f.status !== "resolved").length;
@@ -26,7 +28,7 @@ export default function CasesPage() {
         </>
       }
     >
-      <DataTable columns={columns} data={d.cases} searchPlaceholder="Search case ref, title or institution" initialSorting={[{ id: "updated", desc: true }]} />
+      <DataTable columns={columns} data={d.cases} onRowClick={(row) => router.push(caseHref(row))} searchPlaceholder="Search case ref, title or institution" initialSorting={[{ id: "updated", desc: true }]} />
     </PortalPage>
   );
 }

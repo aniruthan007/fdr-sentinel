@@ -38,6 +38,7 @@ import type {
   ISODate,
   ISOTimestamp,
   Paise,
+  ReleaseStatus,
   Session,
   VerificationCase,
 } from "@/types";
@@ -95,6 +96,29 @@ export interface RecordDecisionInput {
   /** Office reference for the decision, e.g. DC/REL/2026/0027. Required. */
   referenceNo: string;
 }
+export interface AssignCaseInput {
+  caseId: string;
+  /** Defaults to the acting user. Only a Supervisor may assign someone else. */
+  assigneeId?: string;
+}
+export interface ResolveFindingInput {
+  findingId: string;
+  resolution: string;
+}
+export interface RecordChecklistOutcomeInput {
+  itemId: string;
+  outcome: "satisfied" | "failed" | "not_applicable";
+  evidenceDocumentId?: string | null;
+  /** Required for failed and not applicable. */
+  note?: string;
+}
+export interface MarkReadyInput {
+  caseId: string;
+  recommendation: string;
+}
+export interface RequestClearancesInput {
+  releaseRequestId: string;
+}
 export interface RenewInstrumentInput {
   predecessorId: string;
   instrumentNo: string;
@@ -122,6 +146,11 @@ interface DemoState {
   recordClearance: (input: RecordClearanceInput) => Promise<ActionResult>;
   recordDecision: (input: RecordDecisionInput) => Promise<ActionResult>;
   renewInstrument: (input: RenewInstrumentInput) => Promise<ActionResult>;
+  assignCase: (input: AssignCaseInput) => Promise<ActionResult>;
+  resolveFinding: (input: ResolveFindingInput) => Promise<ActionResult>;
+  recordChecklistOutcome: (input: RecordChecklistOutcomeInput) => Promise<ActionResult>;
+  markReadyForDecision: (input: MarkReadyInput) => Promise<ActionResult>;
+  requestClearances: (input: RequestClearancesInput) => Promise<ActionResult>;
   resetDemo: () => Promise<ActionResult>;
 }
 
@@ -189,7 +218,7 @@ function refreshObligation(d: DemoData, obligationId: string) {
 
 function addChecklist(d: DemoData, caseId: string, checklist: ChecklistKind) {
   for (const req of d.checklistRequirements.filter((r) => r.checklist === checklist)) {
-    d.checklistItems.push({ id: newId("cci"), caseId, requirementId: req.id, status: "pending", evidenceDocumentId: null, checkedBy: null, checkedAt: null });
+    d.checklistItems.push({ id: newId("cci"), caseId, requirementId: req.id, status: "pending", evidenceDocumentId: null, note: null, checkedBy: null, checkedAt: null });
   }
 }
 
@@ -237,8 +266,18 @@ const AUDIT_ACTION: Record<Action, string> = {
   recordClearance: "clearance.recorded",
   recordDecision: "decision.recorded",
   renewInstrument: "instrument.renewal_submitted",
+  assignCase: "case.assigned",
+  resolveFinding: "finding.resolved",
+  recordChecklistOutcome: "checklist.recorded",
+  markReadyForDecision: "case.ready_for_decision",
+  requestClearances: "clearances.requested",
   resetDemo: "demo.reset",
 };
+
+/** Clause 6.46 items satisfied by recorded clearances rather than by a manual check. */
+const CLEARANCE_BACKED: ReadonlySet<string> = new Set(["req-646-05", "req-646-06"]);
+/** In production a supervisor assigns clearances; the demo has a single clearance officer. */
+const DEFAULT_CLEARANCE_OFFICER = "u-co";
 
 // Commands are serialised so each audit event chains onto the one before it.
 let queue: Promise<unknown> = Promise.resolve();
@@ -407,7 +446,7 @@ export const useDemoStore = create<DemoState>()(
               d.findings.push({
                 id, caseId: c.id, type: input.type, severity: input.severity, field: input.field ?? null,
                 declaredValue: input.declaredValue ?? null, extractedValue: input.extractedValue ?? null, recordValue: input.recordValue ?? null,
-                description: input.description.trim(), status: "open", raisedBy: s.userId, raisedAt: now, resolvedAt: null,
+                description: input.description.trim(), status: "open", raisedBy: s.userId, raisedAt: now, resolvedAt: null, resolution: null,
               });
               if (c.status === "open") moveCase(d, c, "in_review", "raiseFinding", s.userId, now);
               else if (!["in_review", "awaiting_institution"].includes(c.status)) throw new CommandError(`Cannot raise a finding on a case that is ${c.status}`);
@@ -540,7 +579,7 @@ export const useDemoStore = create<DemoState>()(
                 }
               }
               for (const obId of new Set(insts.map((i) => i.obligationId))) refreshObligation(d, obId);
-              notify(d, { recipientRole: null, institutionId: c.institutionId, severity: input.decision === "approved" ? "success" : "critical", title: `${c.ref} ${input.decision} (ref. ${referenceNo})`, body: reason, href: "/institution" }, now);
+              notify(d, { recipientRole: null, institutionId: c.institutionId, severity: input.decision === "approved" ? "success" : "critical", title: `${d.releaseRequests.find((r) => r.id === c.releaseRequestId)?.ref ?? c.ref} ${input.decision} (ref. ${referenceNo})`, body: reason, href: c.type === "release" ? "/institution/releases" : "/institution" }, now);
               return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `${input.decision === "approved" ? "Approved" : "Rejected"} ${c.ref} (ref. ${referenceNo}): ${reason}`, payload: { decision: input.decision, caseType: c.type, referenceNo } };
             },
           ),
@@ -570,6 +609,139 @@ export const useDemoStore = create<DemoState>()(
             },
           ),
 
+        assignCase: (input) =>
+          command(
+            "assignCase",
+            (d) => d.cases.find((c) => c.id === input.caseId)?.institutionId,
+            (d, now, s) => {
+              const c = must(d.cases.find((x) => x.id === input.caseId), "Case");
+              const assignee = input.assigneeId ?? s.userId;
+              if (s.role === "processing_officer") {
+                if (assignee !== s.userId) throw new CommandError("Only a supervisor can assign work to someone else");
+                if (c.assigneeId && c.assigneeId !== s.userId) throw new CommandError("Case is already assigned");
+              }
+              const user = DEMO_USERS.find((u) => u.id === assignee);
+              if (!user || user.role !== "processing_officer") throw new CommandError("Cases can only be assigned to a processing officer");
+              if (["approved", "rejected", "closed"].includes(c.status)) throw new CommandError(`Case is ${c.status}`);
+              c.assigneeId = assignee;
+              c.updatedAt = now;
+              c.version += 1;
+              if (c.status === "open") moveCase(d, c, "in_review", "assignCase", s.userId, now);
+              for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id) && i.status === "submitted")) {
+                bringUnderReview(d, inst, s.userId, now);
+              }
+              return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `${c.ref} assigned to ${user.name}`, payload: { assigneeId: assignee } };
+            },
+          ),
+
+        resolveFinding: (input) =>
+          command(
+            "resolveFinding",
+            (d) => {
+              const f = d.findings.find((x) => x.id === input.findingId);
+              return d.cases.find((c) => c.id === f?.caseId)?.institutionId;
+            },
+            (d, now, s) => {
+              const f = must(d.findings.find((x) => x.id === input.findingId), "Finding");
+              const c = must(d.cases.find((x) => x.id === f.caseId), "Case");
+              const resolution = input.resolution.trim();
+              if (!resolution) throw new CommandError("Describe how the finding was resolved");
+              assertTransition("finding", findingMachine, f.status, "resolved");
+              f.status = "resolved";
+              f.resolvedAt = now;
+              f.resolution = resolution;
+              const unresolved = d.findings.some((x) => x.caseId === c.id && x.status !== "resolved");
+              if (!unresolved) {
+                if (c.status === "awaiting_institution") moveCase(d, c, "in_review", "resolveFinding", s.userId, now);
+                for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id))) {
+                  if (inst.status === "needs_correction") bringUnderReview(d, inst, s.userId, now);
+                }
+              }
+              return { entityType: "finding", entityId: f.id, institutionId: c.institutionId, summary: `Resolved ${f.type.replace(/_/g, " ")} on ${c.ref}: ${resolution}`, payload: { caseRef: c.ref } };
+            },
+          ),
+
+        recordChecklistOutcome: (input) =>
+          command(
+            "recordChecklistOutcome",
+            (d) => {
+              const item = d.checklistItems.find((x) => x.id === input.itemId);
+              return d.cases.find((c) => c.id === item?.caseId)?.institutionId;
+            },
+            (d, now, s) => {
+              const item = must(d.checklistItems.find((x) => x.id === input.itemId), "Checklist item");
+              const c = must(d.cases.find((x) => x.id === item.caseId), "Case");
+              const req = must(d.checklistRequirements.find((r) => r.id === item.requirementId), "Requirement");
+              if (CLEARANCE_BACKED.has(req.id)) throw new CommandError("This item is satisfied by recorded clearances, not manually");
+              if (["approved", "rejected", "closed"].includes(c.status)) throw new CommandError(`Case is ${c.status}`);
+              if (item.status === "satisfied") throw new CommandError("Item already satisfied");
+              const note = input.note?.trim() ?? "";
+              if (input.outcome !== "satisfied" && !note) throw new CommandError("A reason is required");
+              if (input.evidenceDocumentId) must(d.documents.find((x) => x.id === input.evidenceDocumentId), "Evidence document");
+              item.status = input.outcome;
+              item.evidenceDocumentId = input.evidenceDocumentId ?? item.evidenceDocumentId;
+              item.note = note || null;
+              item.checkedBy = s.userId;
+              item.checkedAt = now;
+              if (c.status === "open") moveCase(d, c, "in_review", "recordChecklistOutcome", s.userId, now);
+              return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `${req.code} ${input.outcome.replace(/_/g, " ")} on ${c.ref}`, payload: { requirement: req.code, outcome: input.outcome } };
+            },
+          ),
+
+        markReadyForDecision: (input) =>
+          command(
+            "markReadyForDecision",
+            (d) => d.cases.find((c) => c.id === input.caseId)?.institutionId,
+            (d, now, s) => {
+              const c = must(d.cases.find((x) => x.id === input.caseId), "Case");
+              if (c.type === "release") throw new CommandError("A release case becomes ready when every clearance is recorded");
+              const recommendation = input.recommendation.trim();
+              if (!recommendation) throw new CommandError("Add a recommendation for the approver");
+              const blocking = d.findings.filter((f) => f.caseId === c.id && f.status !== "resolved" && f.severity === "critical");
+              if (blocking.length) throw new CommandError(`${blocking.length} critical finding(s) are unresolved`);
+              const open = d.checklistItems.filter((i) => i.caseId === c.id && !["satisfied", "not_applicable"].includes(i.status));
+              if (open.length) throw new CommandError(`${open.length} checklist item(s) are not satisfied`);
+              if (c.status === "open") moveCase(d, c, "in_review", "startReview", s.userId, now);
+              moveCase(d, c, "ready_for_decision", "markReadyForDecision", s.userId, now);
+              notify(d, { recipientRole: "approver", institutionId: null, severity: "info", title: `${c.ref} is ready for authorised decision`, body: recommendation, href: `/official/cases/${c.id}` }, now);
+              return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `${c.ref} ready for authorised decision. Recommendation: ${recommendation}`, payload: { recommendation } };
+            },
+          ),
+
+        requestClearances: (input) =>
+          command(
+            "requestClearances",
+            (d) => d.releaseRequests.find((r) => r.id === input.releaseRequestId)?.institutionId,
+            (d, now, s) => {
+              const rr = must(d.releaseRequests.find((r) => r.id === input.releaseRequestId), "Release request");
+              const c = must(d.cases.find((x) => x.id === rr.caseId), "Case");
+              // Completeness review: the four Clause 6.46 documents must be checked first (brief §7.3.3).
+              const docItems = d.checklistItems.filter((i) => i.caseId === c.id && !CLEARANCE_BACKED.has(i.requirementId));
+              const missing = docItems.filter((i) => !["satisfied", "not_applicable"].includes(i.status));
+              if (missing.length) throw new CommandError(`Complete the Clause 6.46 document checks first (${missing.length} outstanding)`);
+              const path: ReleaseStatus[] = ["completeness_review", "in_verification", "awaiting_clearances"];
+              for (const to of path.slice(path.indexOf(rr.status as ReleaseStatus) + 1)) {
+                assertTransition("release", releaseMachine, rr.status, to);
+                d.workflowEvents.push({ id: newId("wf"), entityType: "release_request", entityId: rr.id, command: "requestClearances", from: rr.status, to, actorId: s.userId, at: now });
+                rr.status = to;
+              }
+              if (rr.status !== "awaiting_clearances") throw new CommandError(`Clearances cannot be requested while the request is ${rr.status.replace(/_/g, " ")}`);
+              let requested = 0;
+              for (const clr of d.clearances.filter((x) => x.releaseRequestId === rr.id && x.status === "not_requested")) {
+                assertTransition("clearance", clearanceMachine, clr.status, "pending");
+                clr.status = "pending";
+                clr.assignedTo = DEFAULT_CLEARANCE_OFFICER;
+                clr.requestedAt = now;
+                requested += 1;
+              }
+              if (requested === 0) throw new CommandError("Every clearance on this request has already been requested");
+              if (!c.assigneeId) c.assigneeId = s.userId;
+              if (c.status === "open") moveCase(d, c, "in_review", "requestClearances", s.userId, now);
+              notify(d, { recipientRole: "clearance_officer", institutionId: null, severity: "info", title: `${requested} clearance(s) requested on ${rr.ref}`, body: "Record each outcome with a reference.", href: "/official/clearances" }, now);
+              return { entityType: "release_request", entityId: rr.id, institutionId: rr.institutionId, summary: `Requested ${requested} clearance(s) on ${rr.ref}`, payload: { requested } };
+            },
+          ),
+
         resetDemo: () =>
           serial(async (): Promise<ActionResult> => {
             const { session } = get();
@@ -596,8 +768,8 @@ export const useDemoStore = create<DemoState>()(
     },
     {
       name: "fdr-sentinel-demo",
-      // v3: brief §7.2–7.4 status vocabularies. Older persisted data is discarded and reseeded.
-      version: 3,
+      // v4: finding resolutions and checklist notes. Older persisted data is discarded and reseeded.
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ data: s.data, session: s.session }),
       // Rehydrated manually by <DemoProvider> so server and first client render match.

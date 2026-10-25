@@ -260,6 +260,8 @@ export interface VerificationFinding {
   raisedBy: string;
   raisedAt: ISOTimestamp;
   resolvedAt: ISOTimestamp | null;
+  /** How the finding was resolved; recorded by the officer who resolves it. */
+  resolution: string | null;
 }
 
 export interface ReleaseRequest {
@@ -348,6 +350,8 @@ export interface CaseChecklistItem {
   requirementId: string;
   status: ChecklistItemStatus;
   evidenceDocumentId: string | null;
+  /** Reason, required when an item is recorded as failed or not applicable. */
+  note: string | null;
   checkedBy: string | null;
   checkedAt: ISOTimestamp | null;
 }

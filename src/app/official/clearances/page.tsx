@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { ClearanceDialog } from "@/components/official/action-dialogs";
 import { CheckCircle2, Hourglass, OctagonAlert, PlugZap } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { PortalPage } from "@/components/portal-page";
@@ -11,7 +13,16 @@ import { useDemoData, useSession } from "@/store/hooks";
 export default function ClearancesPage() {
   const d = useDemoData();
   const session = useSession();
-  const columns = useMemo(() => clearanceColumns(d), [d]);
+  // The assigned clearance officer records outcomes here; other roles only read.
+  const columns = useMemo(
+    () =>
+      clearanceColumns(d, (c) =>
+        session?.role === "clearance_officer" && c.assignedTo === session.userId && ["pending", "further_info_required", "error_unavailable"].includes(c.status) ? (
+          <ClearanceDialog clearance={c} requestRef={d.releaseRequests.find((r) => r.id === c.releaseRequestId)?.ref ?? ""} trigger={<Button size="xs">Record</Button>} />
+        ) : null,
+      ),
+    [d, session],
+  );
   // Brief §2.1: a clearance officer sees only clearances assigned to them.
   const visible = useMemo(
     () => (session?.role === "clearance_officer" ? d.clearances.filter((c) => c.assignedTo === session.userId) : d.clearances),

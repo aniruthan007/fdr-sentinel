@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { GitBranch } from "lucide-react";
 import { DateText } from "@/components/date-text";
@@ -36,6 +37,20 @@ const CASE_TYPE_LABELS: Record<VerificationCase["type"], string> = {
   release: "Release",
   renewal: "Renewal",
 };
+
+/** Where a case is worked: release cases on their release request page, others in the case workbench. */
+export function caseHref(c: Pick<VerificationCase, "id" | "type" | "releaseRequestId">): string {
+  return c.type === "release" && c.releaseRequestId ? `/official/releases/${c.releaseRequestId}` : `/official/cases/${c.id}`;
+}
+
+/** A reference rendered as a real link, so rows are reachable by keyboard as well as by click. */
+function RefLink({ href, children }: { href: string; children: string }) {
+  return (
+    <Link href={href} onClick={(e) => e.stopPropagation()} className="font-mono text-[0.8125rem] font-medium text-primary underline-offset-2 hover:underline">
+      {children}
+    </Link>
+  );
+}
 
 function institutionName(d: DemoData, id: string) {
   return d.institutions.find((i) => i.id === id)?.shortName ?? id;
@@ -120,7 +135,7 @@ export function caseColumns(d: DemoData, opts: { institution?: boolean } = { ins
       accessorFn: (r) => `${r.ref} ${r.title}`,
       cell: ({ row: { original: r } }) => (
         <div className="min-w-0">
-          <IdText value={r.ref} />
+          <RefLink href={caseHref(r)}>{r.ref}</RefLink>
           <p className="max-w-xs truncate text-xs text-muted-foreground" title={r.title}>{r.title}</p>
         </div>
       ),
@@ -136,9 +151,14 @@ export function caseColumns(d: DemoData, opts: { institution?: boolean } = { ins
   return cols;
 }
 
-export function releaseColumns(d: DemoData, opts: { institution?: boolean } = { institution: true }): ColumnDef<ReleaseRequest>[] {
+export function releaseColumns(d: DemoData, opts: { institution?: boolean; link?: boolean } = { institution: true }): ColumnDef<ReleaseRequest>[] {
   const cols: ColumnDef<ReleaseRequest>[] = [
-    { id: "ref", header: "Request", accessorFn: (r) => r.ref, cell: ({ row }) => <IdText value={row.original.ref} /> },
+    {
+      id: "ref",
+      header: "Request",
+      accessorFn: (r) => r.ref,
+      cell: ({ row }) => (opts.link === false ? <IdText value={row.original.ref} /> : <RefLink href={`/official/releases/${row.original.id}`}>{row.original.ref}</RefLink>),
+    },
   ];
   if (opts.institution) cols.push({ id: "institution", header: "Institution", accessorFn: (r) => institutionName(d, r.institutionId) });
   cols.push(
@@ -158,8 +178,8 @@ export function releaseColumns(d: DemoData, opts: { institution?: boolean } = { 
   return cols;
 }
 
-export function clearanceColumns(d: DemoData): ColumnDef<ClearanceRecord>[] {
-  return [
+export function clearanceColumns(d: DemoData, action?: (c: ClearanceRecord) => React.ReactNode): ColumnDef<ClearanceRecord>[] {
+  const cols: ColumnDef<ClearanceRecord>[] = [
     { id: "request", header: "Request", accessorFn: (r) => d.releaseRequests.find((x) => x.id === r.releaseRequestId)?.ref ?? "", cell: ({ getValue }) => <IdText value={getValue() as string} /> },
     { id: "institution", header: "Institution", accessorFn: (r) => institutionName(d, d.releaseRequests.find((x) => x.id === r.releaseRequestId)?.institutionId ?? "") },
     {
@@ -178,6 +198,8 @@ export function clearanceColumns(d: DemoData): ColumnDef<ClearanceRecord>[] {
     { id: "recorded", header: "Recorded", accessorFn: (r) => r.recordedAt ?? "", cell: ({ row }) => (row.original.recordedAt ? <DateText at={row.original.recordedAt} /> : <span className="text-muted-foreground">—</span>) },
     { id: "status", header: "Status", accessorFn: (r) => r.status, cell: ({ row }) => <StatusBadge status={row.original.status} /> },
   ];
+  if (action) cols.push({ id: "action", header: "", enableSorting: false, cell: ({ row }) => <div className="text-right">{action(row.original)}</div> });
+  return cols;
 }
 
 export function documentColumns(d: DemoData): ColumnDef<DocumentRecord>[] {

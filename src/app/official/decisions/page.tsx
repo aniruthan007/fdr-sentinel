@@ -1,15 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Gavel, XCircle } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { PortalPage, Section } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
-import { caseColumns } from "@/components/tables/columns";
+import { caseColumns, caseHref } from "@/components/tables/columns";
 import { useDemoData } from "@/store/hooks";
 
 export default function DecisionsPage() {
   const d = useDemoData();
+  const router = useRouter();
   const columns = useMemo(() => caseColumns(d), [d]);
   const ready = useMemo(() => d.cases.filter((c) => c.status === "ready_for_decision"), [d]);
   const decided = useMemo(() => d.cases.filter((c) => ["approved", "rejected", "closed"].includes(c.status)), [d]);
@@ -28,10 +30,10 @@ export default function DecisionsPage() {
       }
     >
       <Section title="Ready for authorised decision">
-        <DataTable columns={columns} data={ready} emptyTitle="Nothing waiting for a decision" />
+        <DataTable columns={columns} data={ready} onRowClick={(row) => router.push(caseHref(row))} emptyTitle="Nothing waiting for a decision" />
       </Section>
       <Section title="Decided">
-        <DataTable columns={columns} data={decided} initialSorting={[{ id: "updated", desc: true }]} />
+        <DataTable columns={columns} data={decided} onRowClick={(row) => router.push(caseHref(row))} initialSorting={[{ id: "updated", desc: true }]} />
       </Section>
     </PortalPage>
   );

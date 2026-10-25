@@ -148,6 +148,7 @@ export function buildFindings(ctx: SeedContext): VerificationFinding[] {
       raisedBy: "u-po",
       raisedAt: ctx.t(-2, 11, 10),
       resolvedAt: null,
+      resolution: null,
     },
     {
       id: "fd-02",
@@ -163,6 +164,7 @@ export function buildFindings(ctx: SeedContext): VerificationFinding[] {
       raisedBy: "u-po",
       raisedAt: ctx.t(-2, 11, 12),
       resolvedAt: null,
+      resolution: null,
     },
     {
       id: "fd-03",
@@ -178,6 +180,7 @@ export function buildFindings(ctx: SeedContext): VerificationFinding[] {
       raisedBy: "u-po",
       raisedAt: ctx.t(-3, 10, 0),
       resolvedAt: null,
+      resolution: null,
     },
   ];
 }
@@ -220,6 +223,7 @@ export function buildChecklistItems(ctx: SeedContext): CaseChecklistItem[] {
     requirementId,
     status,
     evidenceDocumentId: evidence,
+    note: status === "failed" ? "Affidavit 6 not uploaded with the submission." : null,
     checkedBy: offset === null ? null : ["req-646-05", "req-646-06"].includes(requirementId) ? "u-co" : "u-po",
     checkedAt: offset === null ? null : ctx.t(offset, 12, 0),
   }));

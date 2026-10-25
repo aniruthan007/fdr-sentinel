@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { ClearanceDialog } from "@/components/official/action-dialogs";
 import { CalendarClock, Gavel, ListChecks, ScrollText, ShieldCheck } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { PortalPage, Section } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
-import { caseColumns, clearanceColumns } from "@/components/tables/columns";
+import { caseColumns, caseHref, clearanceColumns } from "@/components/tables/columns";
 import { ROLE_LABELS } from "@/lib/authz";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { useDemoData, useSession, useToday } from "@/store/hooks";
@@ -14,6 +17,7 @@ const ACTIVE = ["open", "in_review", "awaiting_institution", "ready_for_decision
 
 export default function OfficialOverviewPage() {
   const d = useDemoData();
+  const router = useRouter();
   const session = useSession();
   const today = useToday();
   const role = session?.role;
@@ -30,7 +34,15 @@ export default function OfficialOverviewPage() {
   );
   const maturing = d.instruments.filter((i) => ["near_maturity", "matured"].includes(instrumentDisplayStatus(i, today))).length;
   const caseCols = useMemo(() => caseColumns(d), [d]);
-  const clrCols = useMemo(() => clearanceColumns(d), [d]);
+  const clrCols = useMemo(
+    () =>
+      clearanceColumns(d, (c) =>
+        c.assignedTo === session?.userId ? (
+          <ClearanceDialog clearance={c} requestRef={d.releaseRequests.find((r) => r.id === c.releaseRequestId)?.ref ?? ""} trigger={<Button size="xs">Record</Button>} />
+        ) : null,
+      ),
+    [d, session],
+  );
 
   // Each role's queue: what this person is expected to act on next.
   const queue =
@@ -65,7 +77,7 @@ export default function OfficialOverviewPage() {
         </Section>
       ) : (
         <Section title={`Your queue · ${role ? ROLE_LABELS[role] : ""}`}>
-          <DataTable columns={caseCols} data={queue} initialSorting={[{ id: "updated", desc: true }]} emptyTitle="Queue is clear" />
+          <DataTable columns={caseCols} data={queue} onRowClick={(row) => router.push(caseHref(row))} initialSorting={[{ id: "updated", desc: true }]} emptyTitle="Queue is clear" />
         </Section>
       )}
     </PortalPage>

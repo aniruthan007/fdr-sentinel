@@ -1,5 +1,45 @@
 # Implementation status
 
+Build order: 1 → 2 → **4** → 3 (Official Portal before Institution Portal, by request).
+
+## Phase 4 — Official Operations Portal ✅
+
+**Done**
+- New store commands, each gated by `can()`, validated by the state machines and audited:
+  `assignCase` (claim / allocate), `resolveFinding`, `recordChecklistOutcome`, `markReadyForDecision`,
+  `requestClearances` (completeness review → in verification → awaiting clearances; needs the four
+  Clause 6.46 document items checked first).
+- Case workbench `/official/cases/[id]`: document replica with evidence overlays (click a field or a region,
+  confidence %, < 90% shown amber), confirm-field, discrepancy panel (declared / extracted / on record, Flag
+  for review), findings (raise, resolve), checklist outcomes, request correction, mark ready, decision
+  panel, case history from the audit chain.
+- Release review `/official/releases/[id]`: §7.3 stepper, request + instruments, evidence, Clause 6.46
+  checklist, clearances (SIMULATED), request clearances, authorised decision (reason + order/NOC reference).
+- Clearance officer records outcomes from their queue and the Clearances page (assigned clearances only;
+  §7.4 rules: Cleared needs a reference, other outcomes need a reason).
+- Maturity radar: 90-day calendar heatmap, bands, overdue list, click a day to drill in.
+- Audit explorer: re-hash the chain live; simulate tampering on any event (copy only) and show exactly
+  where it breaks; event detail sheet with full hashes and payload.
+- Work queue and list rows open the record; detail pages inherit their section's role gating; breadcrumbs
+  show the record reference.
+
+**Verified in the browser (fresh seed, 1440px)**
+- RR-2026-0027 cross-role flow: Clearance Officer recorded PGRC (pending → cleared) and Vigilance Cell
+  (further info → cleared, with only Cleared/Not cleared offered) → request and case became Ready for
+  authorised decision, Clause 6.46 6/6 → Approver recorded Approve with reason and DC/REL/2026/0027 →
+  request Approved, FDR Released, obligation Discharged → Institution Owner sees Approved (4/4), the
+  instrument Released, the obligation Discharged and a notification → Auditor: chain intact across 30
+  events; simulated tampering on #16 shows #1–15 verified, #16 broken, #17+ untrusted.
+- Workbench evidence linking (table row ↔ document region ↔ field list); maturity drill-in.
+- 375px: no horizontal overflow on the case workbench, release review, maturity radar.
+- `pnpm test` 24/24, including the same cross-role flow at store level.
+
+**Known gaps**
+- Decision options are Approve / Reject; the brief's Return and On hold exist in the release state
+  machine but have no UI yet.
+- Clearances are assigned to the single demo clearance officer; supervisor allocation UI is not built.
+- The institution-submit release flow is exercised by tests only until Phase 3 builds the wizard.
+
 ## Phase 2 — Landing page ✅
 
 **Done** (`src/app/page.tsx`, `src/components/landing/*`)

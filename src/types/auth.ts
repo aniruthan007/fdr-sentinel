@@ -44,4 +44,9 @@ export type Action =
   | "recordClearance"
   | "recordDecision"
   | "renewInstrument"
+  | "assignCase"
+  | "resolveFinding"
+  | "recordChecklistOutcome"
+  | "markReadyForDecision"
+  | "requestClearances"
   | "resetDemo";

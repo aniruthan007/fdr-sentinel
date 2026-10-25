@@ -61,6 +61,18 @@ export function navFor(portal: Portal, role: Role): NavItem[] {
   return items.filter((i) => i.roles.includes(role));
 }
 
+/**
+ * The nav item that owns a path — exact match, else the longest prefix — so a detail page such as
+ * /official/cases/vc-01 inherits the role gating of /official/cases. Portal roots match only exactly.
+ */
 export function navItemFor(pathname: string): NavItem | undefined {
-  return [...INSTITUTION_NAV, ...OFFICIAL_NAV].find((i) => i.href === pathname);
+  const items = [...INSTITUTION_NAV, ...OFFICIAL_NAV];
+  const exact = items.find((i) => i.href === pathname);
+  if (exact) return exact;
+  return items
+    .filter((i) => i.href.split("/").length > 2 && pathname.startsWith(`${i.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 }
+
+/** Roadmap phases (CLAUDE.md §8) whose screens are fully built; other pages show a "coming in Phase N" note. */
+export const COMPLETED_PHASES: ReadonlySet<number> = new Set([1, 2, 4]);

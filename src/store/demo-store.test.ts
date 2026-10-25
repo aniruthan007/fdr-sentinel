@@ -186,6 +186,67 @@ describe("commands", () => {
     expect(r).toEqual({ ok: false, error: "This clearance is not assigned to you" });
   });
 
+  it("lets a processing officer claim an unassigned case but not someone else's", async () => {
+    store().enterAs("u-po");
+    expect((await store().assignCase({ caseId: "vc-04" })).ok).toBe(true);
+    expect(data().cases.find((c) => c.id === "vc-04")).toMatchObject({ assigneeId: "u-po", status: "in_review" });
+    expect(data().instruments.find((i) => i.id === "fdr-hit-03")!.status).toBe("under_review");
+    expect((await store().assignCase({ caseId: "vc-04", assigneeId: "u-sup" })).ok).toBe(false);
+  });
+
+  it("takes the mismatch case to ready via findings, checklist and recommendation", async () => {
+    store().enterAs("u-po");
+    expect((await store().markReadyForDecision({ caseId: "vc-01", recommendation: "Approve" })).ok).toBe(false);
+    for (const f of data().findings.filter((x) => x.caseId === "vc-01")) {
+      expect((await store().resolveFinding({ findingId: f.id, resolution: "Corrected receipt matches declaration" })).ok).toBe(true);
+    }
+    expect((await store().markReadyForDecision({ caseId: "vc-01", recommendation: "Approve: corrected receipt matches." })).ok).toBe(true);
+    expect(data().cases.find((c) => c.id === "vc-01")!.status).toBe("ready_for_decision");
+  });
+
+  it("records checklist outcomes, never manually for clearance-backed items", async () => {
+    store().enterAs("u-po");
+    const affidavit = data().checklistItems.find((i) => i.caseId === "vc-03" && i.requirementId === "req-a1-02")!;
+    expect((await store().recordChecklistOutcome({ itemId: affidavit.id, outcome: "not_applicable", note: "" })).ok).toBe(false);
+    expect((await store().recordChecklistOutcome({ itemId: affidavit.id, outcome: "satisfied", evidenceDocumentId: "doc-dpip-loa" })).ok).toBe(true);
+    const clearanceItem = data().checklistItems.find((i) => i.caseId === "vc-05" && i.requirementId === "req-646-05")!;
+    expect((await store().recordChecklistOutcome({ itemId: clearanceItem.id, outcome: "satisfied" })).ok).toBe(false);
+  });
+
+  it("runs a new release request through completeness review to requested clearances", async () => {
+    store().enterAs("u-owner");
+    const r = await store().submitReleaseRequest({ instrumentIds: ["fdr-kit-04"], reason: "Programme closed" });
+    expect(r.ok).toBe(true);
+    const rr = data().releaseRequests.at(-1)!;
+    store().enterAs("u-po");
+    expect((await store().requestClearances({ releaseRequestId: rr.id })).ok).toBe(false); // documents unchecked
+    for (const item of data().checklistItems.filter((i) => i.caseId === rr.caseId && !["req-646-05", "req-646-06"].includes(i.requirementId))) {
+      expect((await store().recordChecklistOutcome({ itemId: item.id, outcome: "satisfied" })).ok).toBe(true);
+    }
+    expect((await store().requestClearances({ releaseRequestId: rr.id })).ok).toBe(true);
+    expect(data().releaseRequests.find((x) => x.id === rr.id)!.status).toBe("awaiting_clearances");
+    const clearances = data().clearances.filter((c) => c.releaseRequestId === rr.id);
+    expect(clearances.every((c) => c.status === "pending" && c.assignedTo === "u-co")).toBe(true);
+    const steps = data().workflowEvents.filter((e) => e.entityId === rr.id).map((e) => e.to);
+    expect(steps).toEqual(["submitted", "completeness_review", "in_verification", "awaiting_clearances"]);
+  });
+
+  it("RR-2026-0027 cross-role: clearances → ready → approved, visible everywhere", async () => {
+    store().enterAs("u-co");
+    for (const c of data().clearances.filter((x) => x.releaseRequestId === "rr-01" && x.status !== "cleared")) {
+      expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `REF/${c.department}`, remarks: "" })).ok).toBe(true);
+    }
+    store().enterAs("u-ap");
+    expect((await store().recordDecision({ caseId: "vc-05", decision: "approved", reason: "All Clause 6.46 items and clearances recorded.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
+    const d = data();
+    expect(d.releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("approved");
+    expect(d.cases.find((c) => c.id === "vc-05")).toMatchObject({ status: "approved", decision: { referenceNo: "DC/REL/2026/0027" } });
+    expect(d.instruments.find((i) => i.id === "fdr-kit-06")!.status).toBe("released");
+    expect(d.obligations.find((o) => o.id === "ob-kit-prog")!.status).toBe("discharged");
+    expect(d.notifications.some((n) => n.institutionId === "inst-kit" && n.title === "RR-2026-0027 approved (ref. DC/REL/2026/0027)")).toBe(true);
+    expect((await verifyChain(d.audit)).ok).toBe(true);
+  });
+
   it("detects tampering in the audit chain", async () => {
     const chain = structuredClone(data().audit);
     chain[5].summary = "Edited after the fact";

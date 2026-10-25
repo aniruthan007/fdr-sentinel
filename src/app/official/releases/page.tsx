@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Hourglass, ShieldCheck, Undo2 } from "lucide-react";
 import { DataTable } from "@/components/data-table";
 import { MoneyText } from "@/components/money-text";
@@ -12,6 +13,7 @@ import { useDemoData } from "@/store/hooks";
 
 export default function OfficialReleasesPage() {
   const d = useDemoData();
+  const router = useRouter();
   const columns = useMemo(() => releaseColumns(d), [d]);
   const open = d.releaseRequests.filter(isOpenRelease);
 
@@ -27,7 +29,7 @@ export default function OfficialReleasesPage() {
         </>
       }
     >
-      <DataTable columns={columns} data={d.releaseRequests} searchPlaceholder="Search request or institution" initialSorting={[{ id: "submitted", desc: true }]} />
+      <DataTable columns={columns} data={d.releaseRequests} onRowClick={(row) => router.push(`/official/releases/${row.id}`)} searchPlaceholder="Search request or institution" initialSorting={[{ id: "submitted", desc: true }]} />
     </PortalPage>
   );
 }
