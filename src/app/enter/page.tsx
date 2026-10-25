@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "motion/react";
 import { ArrowRight, Building2, ClipboardCheck, Gavel, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { Brand } from "@/components/shell/brand";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,11 +89,11 @@ export default function EnterPage() {
           {cards.map(({ user, blurb, Icon }, i) => {
             const portal = portalFor(user.role);
             return (
-              <motion.li
+              // CSS entrance: starts at first paint, so it never waits for JavaScript (LCP on slow phones).
+              <li
                 key={user.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut", delay: i * 0.04 }}
+                className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 motion-safe:fill-mode-both motion-safe:duration-200"
+                style={{ animationDelay: `${i * 40}ms` }}
               >
                 <button
                   type="button"
@@ -126,7 +125,7 @@ export default function EnterPage() {
                     <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
                   </div>
                 </button>
-              </motion.li>
+              </li>
             );
           })}
         </ul>

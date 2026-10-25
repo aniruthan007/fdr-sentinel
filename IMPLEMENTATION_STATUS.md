@@ -1,6 +1,42 @@
 # Implementation status
 
-Build order: 1 → 2 → **4** → 3 (Official Portal before Institution Portal, by request).
+Build order: 1 → 2 → **4** → 3 → 5 (Official Portal before Institution Portal, by request).
+
+## Phase 5 — Polish and release ✅ (deployment pending)
+
+**Done**
+- ⌘K / Ctrl+K palette: pages, cases, release requests, instruments, institutions, documents and role
+  switching, scoped like the routes (verified: Kaveri sees only its own records). Fixed a crash on open:
+  this shadcn `CommandDialog` does not render the cmdk root itself.
+- `?q=` deep links on Instruments and Institutions; own shield favicon; Open Graph metadata; 404 page;
+  skip-to-content link; Reset demo has an accessible name; CSV export on Reports; unread notification
+  counts in the sidebar.
+- Lighthouse fixes: the hero text and /enter cards no longer wait for JavaScript to become visible; the
+  lifecycle step targets are now at least 24 × 24 px.
+- README rewritten for judges, with a timed two-minute demo script.
+
+**Lighthouse (production build, local `next start`)**
+
+| Page | Device | Perf | A11y | Best practices | SEO | LCP (simulated / observed) | CLS |
+|---|---|---|---|---|---|---|---|
+| `/` | Desktop | 100 | 100 | 100 | 100 | 0.8 s / 0.65 s | 0 |
+| `/enter` | Desktop | 100 | 100 | 100 | 100 | 0.7 s / 0.47 s | 0 |
+| `/` | Mobile | 73 | 100 | 100 | 100 | 3.4 s / 0.62 s | 0 |
+| `/enter` | Mobile | 79 | 100 | 100 | 100 | 3.4 s / 0.38 s | 0 |
+
+The filmstrip shows the headline fully painted at about first paint. The simulated mobile LCP is
+inflated by hydration JavaScript (TBT about 480–760 ms under 4× CPU throttling). Portal pages need a
+session, so Lighthouse (fresh profile) cannot audit them directly.
+
+**Verified**
+- 32 role × route combinations at 375 px: no horizontal overflow; no console errors.
+- `pnpm test` 30/30, lint, typecheck, build clean.
+
+**Known gaps**
+- **Not deployed:** no Vercel project is linked to `aniruthan007/fdr-sentinel` yet.
+- Mobile Lighthouse performance is below 90. The fix is to ship less JavaScript on public pages: load
+  the demo store and seed lazily instead of in the root providers, and trim `motion` on the landing page.
+- Return / On hold decisions and supervisor allocation UI are not built.
 
 ## Phase 3 — Institution Portal ✅
 
@@ -135,4 +171,4 @@ Build order: 1 → 2 → **4** → 3 (Official Portal before Institution Portal,
 - No UI calls the store commands yet — they are exercised by tests; Phase 3/4 screens wire them up.
 
 **Next step**
-- Phase 5: ⌘K palette, polish, mobile check, Lighthouse, final deploy, README.
+- Deploy to Vercel, then put the URL in the README and the SIH deck.

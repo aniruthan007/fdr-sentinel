@@ -164,17 +164,23 @@ export function LifecycleHero({ restartSignal = 0 }: { restartSignal?: number })
             </AnimatePresence>
           </div>
 
-          {/* Progress: one segment per lifecycle step; click to jump */}
-          <div className="flex items-center gap-2 border-t px-3 py-2.5">
-            <button
-              type="button"
-              onClick={() => setManualPause((p) => !p)}
-              className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label={paused ? "Play lifecycle" : "Pause lifecycle"}
-            >
-              {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
-            </button>
-            <ol className="flex flex-1 gap-1">
+          {/* Progress: one segment per lifecycle step; click to jump. The bar gets the full card width so
+              every step target is at least 24px wide and tall (WCAG 2.2 target size). */}
+          <div className="space-y-1 border-t px-3 pt-2 pb-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setManualPause((p) => !p)}
+                className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={paused ? "Play lifecycle" : "Pause lifecycle"}
+              >
+                {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+              </button>
+              <span className="truncate text-xs text-muted-foreground tabular">
+                {step + 1}/10 · {current.label}
+              </span>
+            </div>
+            <ol className="flex gap-0.5">
               {STEPS.map((s, i) => (
                 <li key={s.label} className="flex-1">
                   <button
@@ -183,7 +189,7 @@ export function LifecycleHero({ restartSignal = 0 }: { restartSignal?: number })
                     aria-label={`Step ${i + 1}: ${s.label}`}
                     aria-current={i === step ? "step" : undefined}
                     title={s.label}
-                    className="group block w-full py-1.5"
+                    className="group block min-h-6 w-full px-0.5 py-2.5"
                   >
                     <span
                       className={cn(
@@ -195,9 +201,6 @@ export function LifecycleHero({ restartSignal = 0 }: { restartSignal?: number })
                 </li>
               ))}
             </ol>
-            <span className="w-28 shrink-0 truncate text-right text-xs text-muted-foreground tabular">
-              {step + 1}/10 · {current.label}
-            </span>
           </div>
         </div>
 
