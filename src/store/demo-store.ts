@@ -20,7 +20,7 @@ import {
 } from "@/lib/workflows";
 import { DEMO_USERS } from "@/data/people";
 import { buildSeed, type DemoData } from "@/data/seed";
-import { CLEARANCE_DEPARTMENTS, CLEARANCE_DEPARTMENT_LABELS, PRE_NOC_CLEARANCES } from "@/data/releases";
+import { CLEARANCE_DEPARTMENT_LABELS, clearanceDepartmentsFor, FINAL_AUTHORITIES, isFinalAuthority, PRE_NOC_CLEARANCES } from "@/data/releases";
 import { blockingFindings, replacementImpact } from "@/lib/replacement-impact";
 import {
   basisChanges,
@@ -639,7 +639,8 @@ export const useDemoStore = create<DemoState>()(
               for (const inst of insts) moveInstrument(d, inst, "release_requested", "submitReleaseRequest", s.userId, now);
               const ob = must(d.obligations.find((o) => o.id === obligationId), "Obligation");
               if (canTransition(obligationMachine, ob.status, "release_in_progress")) ob.status = "release_in_progress";
-              for (const department of CLEARANCE_DEPARTMENTS) {
+              // Clearances as applicable, then the NOC (FDR/RPGF) and/or Council sanction (RTGS) for these instruments.
+              for (const department of clearanceDepartmentsFor(insts.map((i) => i.type))) {
                 // Not requested until an officer reaches the clearance stage (brief §7.3–7.4).
                 d.clearances.push({ id: newId("clr"), releaseRequestId: rrId, department, source: "SIMULATED", status: "not_requested", reference: null, remarks: null, assignedTo: null, requestedAt: null, recordedBy: null, recordedAt: null });
               }
@@ -767,10 +768,10 @@ export const useDemoStore = create<DemoState>()(
               // Brief §7.4: Cleared needs a reference; every other outcome needs a reason.
               if (input.outcome === "cleared" && !reference) throw new CommandError("A clearance reference is required");
               if (input.outcome !== "cleared" && !remarks) throw new CommandError("A reason is required for this outcome");
-              // Clause 6.46 (per brief): the Approval Bureau NOC / sanction order follows the required clearances.
-              if (clr.department === "approval_bureau" && input.outcome === "cleared") {
+              // Clause 6.46: the Approval Bureau NOC (FDR/RPGF) or Council sanction (RTGS) follows the clearances.
+              if (isFinalAuthority(clr.department) && input.outcome === "cleared") {
                 const outstanding = d.clearances.filter((x) => x.releaseRequestId === rr.id && PRE_NOC_CLEARANCES.includes(x.department) && !["cleared", "not_applicable"].includes(x.status));
-                if (outstanding.length) throw new CommandError(`The Approval Bureau NOC follows the clearances; still outstanding: ${outstanding.map((x) => CLEARANCE_DEPARTMENT_LABELS[x.department]).join(", ")}`);
+                if (outstanding.length) throw new CommandError(`The ${CLEARANCE_DEPARTMENT_LABELS[clr.department]} follows the clearances; still outstanding: ${outstanding.map((x) => CLEARANCE_DEPARTMENT_LABELS[x.department]).join(", ")}`);
               }
               assertTransition("clearance", clearanceMachine, clr.status, input.outcome);
               clr.status = input.outcome;
@@ -779,11 +780,11 @@ export const useDemoStore = create<DemoState>()(
               clr.recordedBy = s.userId;
               clr.recordedAt = now;
 
-              // Tick the Clause 6.46 item the clearances evidence: 6.46-05 (PGRC, Vigilance and other
-              // clearances) and 6.46-06 (Approval Bureau NOC).
+              // Tick the Clause 6.46 item the clearances evidence: 6.46-05 (PGRC, Vigilance Cell and other
+              // applicable clearances) and 6.46-06 (Approval Bureau NOC for FDR/RPGF / Council sanction for RTGS).
               const all = d.clearances.filter((x) => x.releaseRequestId === rr.id);
               const done = (deps: string[]) => all.filter((x) => deps.includes(x.department)).every((x) => x.status === "cleared" || x.status === "not_applicable");
-              const reqFor: Record<string, ClearanceDepartment[]> = { "req-646-05": PRE_NOC_CLEARANCES, "req-646-06": ["approval_bureau"] };
+              const reqFor: Record<string, ClearanceDepartment[]> = { "req-646-05": PRE_NOC_CLEARANCES, "req-646-06": FINAL_AUTHORITIES };
               for (const item of d.checklistItems.filter((i) => i.caseId === rr.caseId && reqFor[i.requirementId])) {
                 if (item.status === "pending" && done(reqFor[item.requirementId])) {
                   item.status = "satisfied";

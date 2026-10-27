@@ -53,7 +53,7 @@ synthetic records with explicitly defined requirements:
 |---|---|---|
 | **Institution Owner** | **Release requests → Request a release** → *Establishment* → keep **SUB/TD/2025/0098812** → add a reason, **Use a sample file** twice → tick the declaration → **Submit**. | A new request at *Submitted* with the Clause 6.46 documents. |
 | **Processing Officer** | **Release requests** → the new request → **Record** items 6.46-01 to 04 → **Request clearances**. | Completeness review → In verification → Awaiting clearance(s). |
-| **Clearance Officer** | **Record** PGRC and Vigilance Cell, then the Approval Bureau NOC. | The NOC is refused until the clearances are recorded. Then *Ready for authorised decision* (not an approval). |
+| **Clearance Officer** | **Record** PGRC, Vigilance Cell and *Other applicable cells / bureaus* (Cleared, or Not applicable with a reason), then the Approval Bureau NOC. | The NOC is refused until every clearance is recorded. Then *Ready for authorised decision* (not an approval). |
 | **Approver** | Open the request → **Record decision**. | *Approved*, FDR *Released*. No money moves; the decision is recorded. |
 | **Auditor** | **Audit log → Verify integrity**, then **Simulate tampering**. | The edited row and everything after it fail verification. |
 
@@ -89,8 +89,9 @@ Press **⌘K / Ctrl+K** in a portal to jump to any page or record your role can 
   the successor. The link records `effectiveFrom` and the deciding case.
 - **Corrected policy content.**
   - Annexure-1/2 are no longer used as generic FDR checklists; the replacement checklists are labelled demo configuration.
-  - There is no universal Finance clearance.
-  - PGRC and Vigilance Cell clearances come first; the Approval Bureau NOC (FDR/RPGF) or sanction order (RTGS) is a separate, later record.
+  - There is no universal Finance clearance, and the clearance list is not a closed two-item list: PGRC, Vigilance Cell and *other applicable cells/bureaus* are recorded as applicable (each may be Not applicable, with a reason).
+  - After the clearances come separate final records: the Approval Bureau NOC for FDR/RPGF and the Council sanction order for RTGS.
+  - Requesting all three clearance entries on every release is labelled demo configuration.
   - Reminder windows are configurable product settings.
   - "Unsecured" is now *Matured without a recorded successor — review required*.
 
@@ -100,7 +101,7 @@ Press **⌘K / Ctrl+K** in a portal to jump to any page or record your role can 
 |---|---|---|---|
 | Institution Owner (Kaveri Institute of Technology) | `/institution` | Submit releases and replacements, amend an undecided replacement, upload documents, confirm extracted fields, respond to corrections | See other institutions; approve anything |
 | Processing Officer | `/official` | Review evidence and replacement impact, request (simulated) bank confirmation, raise/resolve findings, request corrections, record checklist outcomes, request clearances, mark ready | Record a decision |
-| Clearance Officer | `/official` | Record clearances assigned to them, then the NOC | See unrelated cases |
+| Clearance Officer | `/official` | Record clearances assigned to them, then the NOC or Council sanction | See unrelated cases |
 | Approver | `/official` | Record the authorised decision with reason and reference, on the current state only | Edit documents or findings |
 | Auditor | `/official` | Read everything, verify the audit chain, export reports | Change any record |
 
@@ -130,7 +131,7 @@ object storage, OCR workers and bank/department adapters. See [`docs/architectur
 
 | Check | Result |
 |---|---|
-| `pnpm test` (Vitest) | 48 tests. 30 existing: authz, commands, cross-role release, correction loop, lineage, partial release, tamper detection. 18 new: shortfall/gap arithmetic, no double counting, insufficient information, independent successor confirmation, history preserved, affected reviews, stale decisions, missing clearances, unauthorised actions, audit events |
+| `pnpm test` (Vitest) | 57 tests. 30 existing: authz, commands, cross-role release, correction loop, lineage, partial release, tamper detection. 27 new: shortfall/gap arithmetic, successor or supporting instruments that do not cover the handover, no double counting, insufficient information, independent successor confirmation, history preserved, affected reviews, stale decisions, missing clearances, other applicable cells, NOC vs Council sanction, unauthorised actions, audit events |
 | `pnpm lint` · `pnpm typecheck` · `pnpm build` | Clean |
 | Browser walk-through (Playwright, one browser) | Full judge scenario across 4 roles; two-tab stale-decision rejection; changed pages at 375 px and 1440 px, light and dark, reduced motion: no horizontal overflow, no console errors |
 | Lighthouse | Last measured in Phase 5 (before this change); not re-run |

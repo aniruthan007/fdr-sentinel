@@ -73,7 +73,7 @@ export const DEMO_USERS: DemoUser[] = [
 export const ENTRY_ROLES: { userId: string; blurb: string }[] = [
   { userId: "u-owner", blurb: "Submit deposits, upload receipts, propose replacement FDRs and request releases for Kaveri Institute of Technology." },
   { userId: "u-po", blurb: "Review evidence and replacement impact, request (simulated) bank confirmations, raise findings and request corrections." },
-  { userId: "u-co", blurb: "Record PGRC and Vigilance Cell clearances, then the Approval Bureau NOC (simulated sources)." },
+  { userId: "u-co", blurb: "Record PGRC, Vigilance Cell and other applicable clearances, then the NOC or Council sanction (simulated sources)." },
   { userId: "u-ap", blurb: "Record the authorised decision — only on the current state of the case." },
   { userId: "u-aud", blurb: "Read-only view of every record and the hash-chained audit log." },
 ];

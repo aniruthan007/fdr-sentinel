@@ -111,11 +111,11 @@ describe("commands", () => {
     expect(data().cases.find((c) => c.id === "vc-02")!.decision).toMatchObject({ referenceNo: "DC/VER/1", decidedBy: "u-ap" });
   });
 
-  it("uses the six Clause 6.46 items; clearances are PGRC and Vigilance, then the NOC — no universal Finance clearance", () => {
+  it("uses the six Clause 6.46 items; PGRC, Vigilance and other applicable cells, then the NOC — no universal Finance clearance", () => {
     const items = data().checklistRequirements.filter((r) => r.checklist === "clause_6_46");
     expect(items).toHaveLength(6);
     expect(items.every((r) => r.provenance === "brief")).toBe(true);
-    expect(new Set(data().clearances.map((c) => c.department))).toEqual(new Set(["pgrc", "vigilance_cell", "approval_bureau"]));
+    expect(new Set(data().clearances.map((c) => c.department))).toEqual(new Set(["pgrc", "vigilance_cell", "other_applicable", "approval_bureau"]));
     // Non-6.46 checklists are labelled demo configuration and are not presented as Annexure-1/2.
     const others = data().checklistRequirements.filter((r) => r.checklist !== "clause_6_46");
     expect(others.every((r) => r.provenance === "demo_config" && !/^Annexure/.test(r.sourceClause))).toBe(true);
@@ -130,7 +130,7 @@ describe("commands", () => {
   it("completes a release: clearances → ready for authorised decision → approved", async () => {
     store().enterAs("u-co");
     const outstanding = data().clearances.filter((x) => x.releaseRequestId === "rr-01" && x.status !== "cleared");
-    expect(outstanding.map((c) => c.status).sort()).toEqual(["further_info_required", "pending", "pending"]);
+    expect(outstanding.map((c) => c.status).sort()).toEqual(["further_info_required", "pending", "pending", "pending"]);
     for (const c of outstanding) {
       expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `REF/${c.id}`, remarks: "" })).ok).toBe(true);
     }
@@ -162,7 +162,7 @@ describe("commands", () => {
     const rr = data().releaseRequests.at(-1)!;
     expect(rr.status).toBe("submitted");
     const clearances = data().clearances.filter((c) => c.releaseRequestId === rr.id);
-    expect(clearances).toHaveLength(3);
+    expect(clearances.map((c) => c.department)).toEqual(["pgrc", "vigilance_cell", "other_applicable", "approval_bureau"]);
     expect(clearances.every((c) => c.status === "not_requested" && c.source === "SIMULATED")).toBe(true);
   });
 

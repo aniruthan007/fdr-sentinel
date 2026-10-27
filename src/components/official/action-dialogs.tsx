@@ -294,7 +294,11 @@ export function ClearanceDialog({ clearance, requestRef, trigger }: Trigger & { 
     <FormDialog
       trigger={trigger}
       title={`${dept} clearance · ${requestRef}`}
-      description="Source is SIMULATED in this prototype. Record the outcome the department gave you."
+      description={
+        clearance.department === "other_applicable"
+          ? "Record which other cell or bureau applies (Cleared, naming it in the remarks with its reference), or why none applies (Not applicable, with a reason). Source is SIMULATED."
+          : "Source is SIMULATED in this prototype. Record the outcome the department gave you."
+      }
       submitLabel="Record clearance"
       successMessage={`${dept} clearance recorded`}
       onOpenChange={(o) => {

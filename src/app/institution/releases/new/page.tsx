@@ -202,7 +202,7 @@ export default function ReleaseWizardPage() {
                   <FilePicker kind="letter_of_approval" value={loa} onChange={setLoa} sampleName="KIT-EoA-2026-27" />
                 )}
               </DocSlot>
-              <p className="text-xs text-muted-foreground">6.46-05 and 6.46-06 (PGRC, Vigilance and other clearances; Approval Bureau NOC) are requested by the officer after you submit.</p>
+              <p className="text-xs text-muted-foreground">6.46-05 and 6.46-06 (PGRC, Vigilance Cell and other applicable clearances; then the Approval Bureau NOC for FDR/RPGF or Council sanction for RTGS) are requested by the officer after you submit.</p>
             </div>
           </>
         )}

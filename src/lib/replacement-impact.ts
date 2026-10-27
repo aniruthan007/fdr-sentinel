@@ -16,10 +16,15 @@ import type { FinancialInstrument, ISODate, Paise } from "@/types";
  *   A2. The successor is needed from the "handover date": the day after the original's maturity date.
  *   A3. If the successor's deposit date is later than the handover date, the days in between are an apparent gap.
  *       No grace period is assumed, because none has been established for this demo.
- *   A4. Coverage after replacement = successor amount + other ACCEPTED (Active) instruments on the same obligation
- *       that still cover the handover date. The original is never counted alongside its own replacement, and
- *       pending candidates are listed but not counted until accepted.
- *   A5. A lower successor amount is not by itself a shortfall: only coverage below the obligation's required amount is.
+ *   A4. Amounts are compared on ONE evaluation day: the handover date, or the successor's deposit date if later.
+ *       Coverage = the successor (only if in force that day) + other ACCEPTED (Active) instruments on the same
+ *       obligation in force that day. An instrument's amount is never counted on a day it does not cover. The
+ *       original is never counted alongside its own replacement; pending candidates are listed, not counted.
+ *       A lower successor amount is not by itself a shortfall: only coverage below the required amount is.
+ *   A5. A gap is "covered" only if accepted instruments in force on EVERY gap day meet the requirement.
+ *   A6. A successor that matures before the handover date covers no day after the original and is flagged.
+ *   A7. Scope: this checks the handover. A supporting instrument that matures during the successor's term is noted
+ *       (info) but not assessed — its own replacement is a separate check.
  */
 
 export type ImpactLevel = "ok" | "info" | "attention" | "insufficient";
@@ -35,6 +40,8 @@ export interface ImpactFinding {
     | "date_gap"
     | "date_gap_covered"
     | "dates_ok"
+    | "successor_ends_before_handover"
+    | "support_matures_during_term"
     | "receipt_missing"
     | "fields_unconfirmed"
     | "consistency_attention"
@@ -64,6 +71,8 @@ export interface ReplacementImpact {
   obligationId: string;
   requiredPaise: Paise | null;
   handoverDate: ISODate | null;
+  /** The single day amounts are compared on (A4): handover date, or the successor's deposit date if later. */
+  evaluationDate: ISODate | null;
   otherAccepted: ImpactInstrument[];
   otherAcceptedPaise: Paise;
   pendingNotCounted: ImpactInstrument[];
@@ -120,24 +129,33 @@ export function replacementImpact(
   const succ: ImpactInstrument = succInst ? toImpact(succInst) : { id: null, ...(successor as { draft: SuccessorDraft }).draft };
   const findings: ImpactFinding[] = [];
 
-  // --- Dates (A1–A3) --------------------------------------------------------------------------
+  // --- Dates and the evaluation day (A1–A4) ---------------------------------------------------
   const handoverDate = original.maturityDate ? addDays(original.maturityDate, 1) : null;
+  const datesKnown = !!handoverDate && !!succ.issueDate && (!!succ.maturityDate || succInst?.type === "RTGS");
+  // A4: amounts are compared on ONE day — the first day the successor is expected to be in force.
+  const evalDay: ISODate | null = handoverDate && succ.issueDate ? (succ.issueDate > handoverDate ? succ.issueDate : handoverDate) : null;
+  const successorInForce = !!evalDay && covers(succ, evalDay);
+  const endsBeforeHandover = !!handoverDate && !!succ.maturityDate && succ.maturityDate < handoverDate;
   let gapDays: number | null = null;
   let gapFrom: ISODate | null = null;
   let gapTo: ISODate | null = null;
 
-  // --- Other coverage (A4) --------------------------------------------------------------------
+  // --- Other coverage (A4) ----------------------------------------------------------------
   const siblings = d.instruments.filter((i) => i.obligationId === original.obligationId && i.id !== original.id && i.id !== succ.id);
-  const evalDay = handoverDate ?? succ.issueDate;
-  const otherAccepted = siblings.filter((i) => i.status === "active" && (!evalDay || covers(i, evalDay))).map(toImpact);
+  const acceptedSiblings = siblings.filter((i) => i.status === "active");
+  // Each supporting instrument counts only on days it actually covers.
+  const acceptedOn = (day: ISODate | null) => (day ? acceptedSiblings.filter((i) => covers(i, day)) : []);
+  const otherAccepted = acceptedOn(evalDay).map(toImpact);
   const otherAcceptedPaise = otherAccepted.reduce((s, i) => s + i.amountPaise, 0);
   const pendingNotCounted = siblings.filter((i) => PENDING.has(i.status)).map(toImpact);
   const required = ob && ob.requirementKnown ? ob.requiredPaise : null;
-  const coverageBeforePaise = otherAcceptedPaise + original.amountPaise;
-  const coverageAfterPaise = otherAcceptedPaise + succ.amountPaise;
-  const shortfallPaise = required === null ? null : Math.max(0, required - coverageAfterPaise);
+  const coverageBeforePaise = acceptedOn(original.maturityDate).reduce((s, i) => s + i.amountPaise, 0) + original.amountPaise;
+  const coverageAfterPaise = otherAcceptedPaise + (successorInForce ? succ.amountPaise : 0);
+  const shortfallPaise = required === null || !evalDay ? null : Math.max(0, required - coverageAfterPaise);
 
-  // --- Amount (A4, A5) ------------------------------------------------------------------------
+  // --- Amount (A4) -------------------------------------------------------------------------
+  const onDay = evalDay ? ` on ${formatDate(evalDay)}` : "";
+  const successorPart = successorInForce ? `successor ${formatINR(succ.amountPaise)}` : `successor not counted — not in force${onDay}`;
   if (required === null) {
     findings.push({
       code: "requirement_unknown",
@@ -146,14 +164,16 @@ export function replacementImpact(
       reason: "The required amount for this obligation has not been established, so coverage cannot be compared against it.",
       nextAction: "Officer to confirm the applicable requirement before any conclusion is drawn.",
     });
-  } else if (shortfallPaise! > 0) {
+  } else if (shortfallPaise === null) {
+    // Dates unknown: reported under dates_unknown below; no amount conclusion is drawn.
+  } else if (shortfallPaise > 0) {
     findings.push({
       code: "amount_shortfall",
       level: "attention",
-      title: `Apparent shortfall of ${formatINR(shortfallPaise!)}`,
+      title: `Apparent shortfall of ${formatINR(shortfallPaise)}`,
       reason:
-        `The continuing obligation requires ${formatINR(required)}. After replacement, accepted coverage would be ${formatINR(coverageAfterPaise)} ` +
-        `(successor ${formatINR(succ.amountPaise)} + other accepted ${formatINR(otherAcceptedPaise)}). ` +
+        `The continuing obligation requires ${formatINR(required)}. Accepted coverage${onDay} would be ${formatINR(coverageAfterPaise)} ` +
+        `(${successorPart} + other accepted in force that day ${formatINR(otherAcceptedPaise)}). ` +
         `The original ${formatINR(original.amountPaise)} is not counted because it is the instrument being replaced.`,
       nextAction: "Institution to amend the successor amount or lodge an additional instrument; officer to review.",
     });
@@ -162,7 +182,7 @@ export function replacementImpact(
       code: "amount_lower_but_covered",
       level: "info",
       title: "Lower successor amount, but no apparent shortfall",
-      reason: `The successor is ${formatINR(original.amountPaise - succ.amountPaise)} lower than the original, but other accepted instruments (${formatINR(otherAcceptedPaise)}) keep coverage at ${formatINR(coverageAfterPaise)} against ${formatINR(required)} required.`,
+      reason: `The successor is ${formatINR(original.amountPaise - succ.amountPaise)} lower than the original, but other accepted instruments in force${onDay} (${formatINR(otherAcceptedPaise)}) keep coverage at ${formatINR(coverageAfterPaise)} against ${formatINR(required)} required.`,
       nextAction: null,
     });
   } else {
@@ -170,7 +190,7 @@ export function replacementImpact(
       code: "amount_ok",
       level: "ok",
       title: "No apparent amount shortfall",
-      reason: `Coverage after replacement ${formatINR(coverageAfterPaise)} against ${formatINR(required)} required.`,
+      reason: `Coverage${onDay} ${formatINR(coverageAfterPaise)} against ${formatINR(required)} required.`,
       nextAction: null,
     });
   }
@@ -184,8 +204,8 @@ export function replacementImpact(
     });
   }
 
-  // --- Date gap (A2, A3) ----------------------------------------------------------------------
-  if (!handoverDate || !succ.issueDate || (!succ.maturityDate && succInst?.type !== "RTGS")) {
+  // --- Date coverage (A1–A3, A5, A6) ------------------------------------------------------------------
+  if (!datesKnown) {
     findings.push({
       code: "dates_unknown",
       level: "insufficient",
@@ -195,27 +215,37 @@ export function replacementImpact(
         : "The successor's deposit or maturity date is missing.",
       nextAction: "Institution to provide the missing dates with supporting evidence.",
     });
+  } else if (endsBeforeHandover) {
+    findings.push({
+      code: "successor_ends_before_handover",
+      level: "attention",
+      title: "Successor matures before the handover date",
+      reason: `The original matures on ${formatDate(original.maturityDate!)}, so a successor is needed from ${formatDate(handoverDate!)}. The proposed successor matures on ${formatDate(succ.maturityDate!)}, so it would not secure the obligation on any day after the original (demo assumptions A1, A2, A6).`,
+      nextAction: "Institution to correct the maturity date with evidence or propose a different successor; officer to review.",
+    });
   } else {
-    const gap = daysBetween(handoverDate, succ.issueDate);
+    const gap = daysBetween(handoverDate!, succ.issueDate!);
     if (gap > 0) {
       gapDays = gap;
-      gapFrom = handoverDate;
-      gapTo = addDays(succ.issueDate, -1);
-      const gapCovered = required !== null && otherAccepted.filter((i) => covers(i, gapFrom!) && covers(i, gapTo!)).reduce((s, i) => s + i.amountPaise, 0) >= required;
+      gapFrom = handoverDate!;
+      gapTo = addDays(succ.issueDate!, -1);
+      // Only instruments in force on EVERY gap day count (coverage periods are contiguous, so both ends suffice).
+      const gapCoverPaise = acceptedSiblings.filter((i) => covers(i, gapFrom!) && covers(i, gapTo!)).reduce((s, i) => s + i.amountPaise, 0);
+      const gapCovered = required !== null && gapCoverPaise >= required;
       findings.push(
         gapCovered
           ? {
               code: "date_gap_covered",
               level: "info",
               title: `${gap}-day gap between instruments, covered by other accepted instruments`,
-              reason: `Between ${formatDate(gapFrom)} and ${formatDate(gapTo)} neither the original nor the successor is in force, but other accepted instruments meet the requirement on those days.`,
+              reason: `Between ${formatDate(gapFrom)} and ${formatDate(gapTo)} neither the original nor the successor is in force, but other accepted instruments in force on every one of those days meet the requirement.`,
               nextAction: null,
             }
           : {
               code: "date_gap",
               level: "attention",
               title: `Apparent coverage gap of ${gap} day${gap === 1 ? "" : "s"}`,
-              reason: `The original matures on ${formatDate(original.maturityDate!)}; the successor's deposit date is ${formatDate(succ.issueDate)}. From ${formatDate(gapFrom)} to ${formatDate(gapTo)} the obligation is not covered by either (demo assumption A3: no grace period).`,
+              reason: `The original matures on ${formatDate(original.maturityDate!)}; the successor's deposit date is ${formatDate(succ.issueDate!)}. From ${formatDate(gapFrom)} to ${formatDate(gapTo)} the obligation is not covered by either (demo assumption A3: no grace period)${gapCoverPaise ? `, and other accepted instruments in force throughout those days total only ${formatINR(gapCoverPaise)}` : ""}.`,
               nextAction: "Institution to amend the deposit date with evidence, or explain the gap; officer to review.",
             },
       );
@@ -224,7 +254,19 @@ export function replacementImpact(
         code: "dates_ok",
         level: "ok",
         title: "No apparent date gap",
-        reason: `The successor starts on ${formatDate(succ.issueDate)}, on or before the handover date ${formatDate(handoverDate)}.`,
+        reason: `The successor runs ${formatDate(succ.issueDate!)} – ${succ.maturityDate ? formatDate(succ.maturityDate) : "no maturity"}, so it is in force on the handover date ${formatDate(handoverDate!)}.`,
+        nextAction: null,
+      });
+    }
+  }
+  // A7: later maturities of supporting instruments are outside this check's scope — noted, not assessed.
+  for (const i of otherAccepted) {
+    if (i.maturityDate && (!succ.maturityDate || i.maturityDate < succ.maturityDate)) {
+      findings.push({
+        code: "support_matures_during_term",
+        level: "info",
+        title: `${i.instrumentNo} matures during the successor's term`,
+        reason: `It is counted${onDay} only. It matures on ${formatDate(i.maturityDate)}; from the next day the obligation's coverage depends on that instrument's own replacement, which this check does not assess (demo assumption A7).`,
         nextAction: null,
       });
     }
@@ -285,6 +327,7 @@ export function replacementImpact(
     obligationId: original.obligationId,
     requiredPaise: required,
     handoverDate,
+    evaluationDate: evalDay,
     otherAccepted,
     otherAcceptedPaise,
     pendingNotCounted,

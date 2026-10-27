@@ -29,7 +29,7 @@ const STEPS: Step[] = [
   { label: "Near maturity", status: "near_maturity", badge: "Near maturity", actor: "System", action: "maturity.reminder", summary: "Matures in 18 days — reminder sent" },
   { label: "Replacement", status: "active", badge: "Replacement accepted · linked", actor: "Approver", action: "instrument.renewed", summary: "Impact checked; successor's own evidence confirmed" },
   { label: "Release requested", status: "release_requested", badge: "Release requested", actor: "Institution", action: "release.submitted", summary: "Clause 6.46 checklist attached" },
-  { label: "Clearances", status: "awaiting_clearances", badge: "Clearances, then NOC", actor: "Clearance officer", action: "clearance.recorded", summary: "PGRC, Vigilance Cell, then AB NOC (simulated)" },
+  { label: "Clearances", status: "awaiting_clearances", badge: "Clearances, then NOC", actor: "Clearance officer", action: "clearance.recorded", summary: "PGRC, Vigilance, other applicable cells, then AB NOC (simulated)" },
   { label: "Decision", status: "approved", badge: "Decision recorded", actor: "Approver", action: "decision.recorded", summary: "Approved · ref DC/REL/2026/0027" },
 ];
 
@@ -340,7 +340,7 @@ function StepDetail({ step }: { step: number }) {
     case 8:
       return (
         <div className="grid grid-cols-2 gap-1.5 text-xs">
-          {["PGRC", "Vigilance Cell", "Approval Bureau NOC (after clearances)"].map((c) => (
+          {["PGRC", "Vigilance Cell", "Other applicable cells", "Approval Bureau NOC (after clearances)"].map((c) => (
             <span key={c} className="flex items-center gap-1.5">
               <Check className="size-3.5 text-status-success" aria-hidden />
               <span className="truncate">{c}</span>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ClearanceDialog } from "@/components/official/action-dialogs";
 import { CheckCircle2, Hourglass, OctagonAlert, PlugZap } from "lucide-react";
 import { DataTable } from "@/components/data-table";
+import { CLEARANCE_DEPARTMENT_LABELS } from "@/data/releases";
 import { PortalPage } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
 import { clearanceColumns } from "@/components/tables/columns";
@@ -38,7 +39,7 @@ export default function ClearancesPage() {
           <StatCard label="Pending / further info" value={count("pending", "further_info_required")} icon={Hourglass} tone={count("pending", "further_info_required") ? "warning" : "default"} />
           <StatCard label="Cleared" value={count("cleared")} icon={CheckCircle2} tone="success" />
           <StatCard label="Not cleared / error" value={count("not_cleared", "error_unavailable")} icon={OctagonAlert} tone={count("not_cleared", "error_unavailable") ? "danger" : "default"} />
-          <StatCard label="Department adapters" value="4" hint="All SIMULATED in this prototype" icon={PlugZap} />
+          <StatCard label="Clearance record types" value={Object.keys(CLEARANCE_DEPARTMENT_LABELS).length} hint="All SIMULATED in this prototype" icon={PlugZap} />
         </>
       }
     >

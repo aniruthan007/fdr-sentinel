@@ -15,8 +15,8 @@ For an original instrument and its proposed successor (a draft in the form, or a
 |---|---|
 | Original vs successor | Instrument no., bank, amount, deposit and maturity dates |
 | Continuing obligation | The obligation the original secures and its required amount (demo configuration) |
-| Other accepted coverage | Other **Active** instruments on the same obligation that still cover the handover date |
-| Coverage after replacement | Successor + other accepted coverage. The original is **not** counted alongside its own replacement |
+| Other accepted coverage | Other **Active** instruments on the same obligation in force on the evaluation day (A4) |
+| Coverage on the evaluation day | Successor (if in force that day) + other accepted coverage. The original is **not** counted alongside its own replacement |
 | Apparent shortfall | Required − coverage after (never negative). A lower amount is not a shortfall if other accepted instruments cover the rest |
 | Pending candidates | Other instruments still under review: listed, **not counted** until accepted |
 | Apparent date gap | Days between the handover date and the successor's deposit date |
@@ -39,8 +39,10 @@ No statutory rule for replacement timing has been established for this prototype
 - **A1.** An instrument covers its obligation from its deposit (issue) date to its maturity date, **both inclusive**, as Asia/Kolkata calendar days. An instrument without a maturity date (RTGS) covers open-endedly.
 - **A2.** The successor is needed from the **handover date**: the day after the original's maturity date.
 - **A3.** If the successor's deposit date is later than the handover date, every day from the handover date up to the day before the deposit is an **apparent gap**. No grace period is assumed.
-- **A4.** Coverage is evaluated on the handover date. Accepted instruments that will have matured by then do not count. Draft, submitted, under-review, needs-correction or verified-not-active instruments do not count.
-- **A5.** A gap is reported as *covered* (info, not attention) only if other accepted instruments meet the full requirement on the first and last gap days.
+- **A4.** Amounts are compared on **one evaluation day**: the handover date, or the successor's deposit date if that is later. Coverage on that day = the successor (only if it is in force that day) + other accepted (Active) instruments on the same obligation in force that day. **No instrument's amount is counted on a day it does not cover.** Draft, submitted, under-review, needs-correction or verified-not-active instruments do not count.
+- **A5.** A gap is reported as *covered* (info, not attention) only if accepted instruments in force on **every** gap day meet the full requirement. Coverage periods are contiguous, so checking the first and last gap days suffices.
+- **A6.** A successor that **matures before the handover date** covers no day after the original. It is flagged (*Successor matures before the handover date*, attention), and its amount is not counted.
+- **A7 (scope).** The check is about the **handover**. A supporting instrument that matures during the successor's term is listed as *info* but not assessed: it needs its own replacement, which is a separate check. The check does not model coverage across the successor's whole term.
 
 Example (the judge scenario, with the seed generated on 27 Oct 2026 — seeded dates move with "today"): original matures 08 Nov 2026 → handover 09 Nov 2026. Successor deposited
 23 Nov 2026 → gap 09–22 Nov 2026 = **14 days**. Successor ₹20 L, no other accepted cover → apparent shortfall **₹5 L**.

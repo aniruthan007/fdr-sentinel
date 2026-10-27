@@ -340,3 +340,151 @@ describe("stale transitions and the action layer", () => {
     expect((await store().amendReplacement({ successorId: id, amountPaise: rupees(25_00_000), issueDate: "2030-01-01", maturityDate: "2031-01-01", receipt: RECEIPT, note: "x" })).ok).toBe(false);
   });
 });
+
+describe("date coverage regressions — successor and supporting instruments must cover the handover", () => {
+  /** Draft with explicit dates relative to the original's maturity M (handover H = M + 1). */
+  const draftDates = (d: DemoData, amountRupees: number, issueFromM: number, maturityFromM: number) => {
+    const original = d.instruments.find((i) => i.id === JUDGE_SCENARIO.originalId)!;
+    const M = original.maturityDate!;
+    return replacementImpact(d, original.id, {
+      draft: { instrumentNo: "NEW/EARLY", bankName: original.bankName, amountPaise: rupees(amountRupees), issueDate: addDays(M, issueFromM), maturityDate: addDays(M, maturityFromM) },
+      draftHasReceipt: true,
+    });
+  };
+
+  it("a successor that starts before the handover but matures before it is not satisfactory coverage", () => {
+    // Issued 30 days before the original matures, matures the day before the original does.
+    const impact = draftDates(data(), 25_00_000, -30, -1);
+    expect(impact.findings.some((f) => f.code === "dates_ok")).toBe(false);
+    expect(impact.findings.find((f) => f.code === "successor_ends_before_handover")?.level).toBe("attention");
+    // Its amount is not counted on a day it does not cover.
+    expect(impact.coverageAfterPaise).toBe(0);
+    expect(impact.shortfallPaise).toBe(rupees(25_00_000));
+    expect(impact.overall).toBe("attention");
+  });
+
+  it("a successor maturing exactly on the original's maturity date also misses the handover day", () => {
+    const impact = draftDates(data(), 25_00_000, -30, 0);
+    expect(impact.findings.find((f) => f.code === "successor_ends_before_handover")?.level).toBe("attention");
+    // Maturing on the handover day itself covers it (A1: inclusive).
+    expect(draftDates(data(), 25_00_000, -30, 1).findings.some((f) => f.code === "successor_ends_before_handover")).toBe(false);
+  });
+
+  it("supporting instruments count only on the days they cover", () => {
+    const original = inst(JUDGE_SCENARIO.originalId);
+    const M = original.maturityDate!;
+    // ₹5 L supporting instrument that covers the handover day but not the successor's later start (gap case).
+    const d = world({ others: [{ amountPaise: rupees(5_00_000), issueDate: addDays(M, -100), maturityDate: addDays(M, 5) }] });
+    const gapCase = draftDates(d, 20_00_000, 15, 380);
+    // Evaluated on the successor's start (M + 15): the supporting instrument has matured, so it is not counted.
+    expect(gapCase.otherAcceptedPaise).toBe(0);
+    expect(gapCase.shortfallPaise).toBe(rupees(5_00_000));
+    // A supporting instrument that does not cover the whole gap does not make the gap "covered".
+    const d2 = world({ others: [{ amountPaise: rupees(25_00_000), issueDate: addDays(M, -100), maturityDate: addDays(M, 5) }] });
+    expect(draftDates(d2, 25_00_000, 15, 380).findings.find((f) => f.code === "date_gap")?.level).toBe("attention");
+    // A supporting instrument not yet in force on the evaluation day is not counted either.
+    const d3 = world({ others: [{ amountPaise: rupees(5_00_000), issueDate: addDays(M, 30), maturityDate: addDays(M, 400) }] });
+    expect(draftDates(d3, 20_00_000, 1, 366).otherAcceptedPaise).toBe(0);
+  });
+
+  it("notes, without blocking, a supporting instrument that matures during the successor's term", () => {
+    const original = inst(JUDGE_SCENARIO.originalId);
+    const M = original.maturityDate!;
+    const d = world({ others: [{ amountPaise: rupees(5_00_000), issueDate: addDays(M, -100), maturityDate: addDays(M, 60) }] });
+    const impact = draftDates(d, 20_00_000, 1, 366);
+    expect(impact.shortfallPaise).toBe(0);
+    const note = impact.findings.find((f) => f.code === "support_matures_during_term");
+    expect(note?.level).toBe("info");
+  });
+
+  it("readiness and decision are refused for a successor that ends before the handover", async () => {
+    store().enterAs("u-owner");
+    const original = inst(JUDGE_SCENARIO.originalId);
+    const M = original.maturityDate!;
+    const r = await store().renewInstrument({ predecessorId: original.id, instrumentNo: "SUB/TD/2026/0000001", amountPaise: rupees(25_00_000), issueDate: addDays(M, -30), maturityDate: addDays(M, -1), receipt: RECEIPT });
+    expect(r.ok).toBe(true);
+    const id = r.ok ? r.id! : "";
+    await confirmAllFields(id);
+    store().enterAs("u-po");
+    expect((await store().requestBankConfirmation({ instrumentId: id })).ok).toBe(true);
+    const c = caseFor(id);
+    for (const item of data().checklistItems.filter((i) => i.caseId === c.id && i.status === "pending")) {
+      await store().recordChecklistOutcome({ itemId: item.id, outcome: "satisfied", evidenceDocumentId: currentDocument(data(), id)!.id });
+    }
+    // Every evidence review is complete, yet the date coverage keeps it from being ready.
+    const ready = await store().markReadyForDecision({ caseId: c.id, recommendation: "Approve" });
+    expect(ready.ok).toBe(false);
+    expect(ready.ok ? "" : ready.error).toContain("matures before the handover");
+    // Even if the case were ready, the decision command re-checks and refuses approval.
+    useDemoStore.setState({ data: { ...data(), cases: data().cases.map((x) => (x.id === c.id ? { ...x, status: "ready_for_decision" as const } : x)) } });
+    store().enterAs("u-ap");
+    const decided = await store().recordDecision({ caseId: c.id, decision: "approved", reason: "x", referenceNo: "DC/REN/9", basis: basisOf(c.id) });
+    expect(decided.ok).toBe(false);
+    expect(decided.ok ? "" : decided.error).toContain("matures before the handover");
+    expect(inst(original.id).status).toBe("active");
+  });
+});
+
+describe("Clause 6.46 distinctions — clearances as applicable, then NOC (FDR/RPGF) or Council sanction (RTGS)", () => {
+  const RELEASE_DOCS = [
+    { kind: "release_application" as const, fileName: "request-letter.pdf", sizeBytes: 120_000 },
+    { kind: "affidavit" as const, fileName: "affidavit-6.pdf", sizeBytes: 98_000 },
+  ];
+
+  it("keeps 'other applicable cells' open-ended: recordable as not applicable only with a reason", async () => {
+    store().enterAs("u-co");
+    const other = data().clearances.find((c) => c.releaseRequestId === "rr-01" && c.department === "other_applicable")!;
+    expect(other.status).toBe("pending");
+    expect((await store().recordClearance({ clearanceId: other.id, outcome: "not_applicable", remarks: "" })).ok).toBe(false);
+    expect((await store().recordClearance({ clearanceId: other.id, outcome: "not_applicable", remarks: "No other cell applies to a programme discontinuation." })).ok).toBe(true);
+    // Not applicable is a recorded determination, not a silent omission.
+    expect(data().clearances.find((c) => c.id === other.id)).toMatchObject({ status: "not_applicable", recordedBy: "u-co" });
+  });
+
+  it("refuses the NOC while any applicable clearance, including other cells, is outstanding", async () => {
+    store().enterAs("u-co");
+    const clrs = data().clearances.filter((c) => c.releaseRequestId === "rr-01");
+    for (const dept of ["pgrc", "vigilance_cell"] as const) {
+      const c = clrs.find((x) => x.department === dept)!;
+      expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `${dept}/1`, remarks: "" })).ok).toBe(true);
+    }
+    const noc = clrs.find((c) => c.department === "approval_bureau")!;
+    const early = await store().recordClearance({ clearanceId: noc.id, outcome: "cleared", reference: "AB/NOC/1", remarks: "" });
+    expect(early.ok ? "" : early.error).toContain("Other applicable cells / bureaus");
+  });
+
+  it("an RTGS release needs the Council sanction order, not the Approval Bureau NOC", async () => {
+    // Yamuna School of Management's institution owner, acting on its own RTGS instrument.
+    useDemoStore.setState({ session: { userId: "ext-inst-ysm", name: "YSM", role: "institution_owner", institutionId: "inst-ysm" } });
+    const r = await store().submitReleaseRequest({ instrumentIds: ["rtgs-ysm-03"], reason: "Programme closed", attachments: RELEASE_DOCS, existingDocumentIds: ["doc-ysm-loa"] });
+    expect(r.ok).toBe(true);
+    const rr = data().releaseRequests.at(-1)!;
+    const depts = data().clearances.filter((c) => c.releaseRequestId === rr.id).map((c) => c.department);
+    expect(depts).toEqual(["pgrc", "vigilance_cell", "other_applicable", "council_sanction"]);
+    expect(depts).not.toContain("approval_bureau");
+
+    store().enterAs("u-po");
+    for (const item of data().checklistItems.filter((i) => i.caseId === rr.caseId && !["req-646-05", "req-646-06"].includes(i.requirementId))) {
+      expect((await store().recordChecklistOutcome({ itemId: item.id, outcome: "satisfied" })).ok).toBe(true);
+    }
+    expect((await store().requestClearances({ releaseRequestId: rr.id })).ok).toBe(true);
+    store().enterAs("u-co");
+    const clrs = data().clearances.filter((c) => c.releaseRequestId === rr.id);
+    const sanction = clrs.find((c) => c.department === "council_sanction")!;
+    expect((await store().recordClearance({ clearanceId: sanction.id, outcome: "cleared", reference: "CS/1", remarks: "" })).ok).toBe(false);
+    for (const c of clrs.filter((x) => x.department !== "council_sanction")) {
+      expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `R/${c.department}`, remarks: "" })).ok).toBe(true);
+    }
+    expect(data().releaseRequests.find((x) => x.id === rr.id)!.status).toBe("awaiting_clearances");
+    expect((await store().recordClearance({ clearanceId: sanction.id, outcome: "cleared", reference: "CS/RTGS/1", remarks: "" })).ok).toBe(true);
+    expect(data().releaseRequests.find((x) => x.id === rr.id)!.status).toBe("ready_for_decision");
+    expect(data().checklistItems.filter((i) => i.caseId === rr.caseId).every((i) => i.status === "satisfied")).toBe(true);
+  });
+
+  it("labels the default applicability as demo configuration and the distinctions as from the brief", () => {
+    const rules = new Map(data().policyRules.map((r) => [r.code, r]));
+    expect(rules.get("RELEASE_DEFAULT_APPLICABILITY")!.provenance).toBe("demo_config");
+    expect(rules.get("RELEASE_CLEARANCES")!.provenance).toBe("brief");
+    expect(rules.get("RELEASE_FINAL_AUTHORITY")!.title).toMatch(/NOC for FDR\/RPGF.*Council sanction order for RTGS/);
+  });
+});

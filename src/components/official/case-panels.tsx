@@ -7,7 +7,7 @@ import { DateText } from "@/components/date-text";
 import { IdText } from "@/components/id-text";
 import { StatusBadge } from "@/components/status-badge";
 import { userName } from "@/components/tables/columns";
-import { CLEARANCE_DEPARTMENT_LABELS } from "@/data/releases";
+import { CLEARANCE_DEPARTMENT_LABELS, CLEARANCE_ORDER } from "@/data/releases";
 import { DOCUMENT_KIND_LABELS } from "@/data/documents";
 import { ROLE_LABELS } from "@/lib/authz";
 import { evidenceRows, formatFieldValue, type EvidenceRow } from "@/lib/evidence";
@@ -270,15 +270,19 @@ export function ChecklistPanel({ data, caseItem }: { data: DemoData; caseItem: V
 export function ClearancesPanel({ data, releaseRequestId }: { data: DemoData; releaseRequestId: string }) {
   const session = useSession();
   const rr = data.releaseRequests.find((r) => r.id === releaseRequestId);
-  const clearances = data.clearances.filter((c) => c.releaseRequestId === releaseRequestId);
+  const clearances = data.clearances
+    .filter((c) => c.releaseRequestId === releaseRequestId)
+    .sort((a, b) => CLEARANCE_ORDER.indexOf(a.department) - CLEARANCE_ORDER.indexOf(b.department));
   const canRecord = useCan("recordClearance", rr?.institutionId);
   if (!rr) return null;
   const done = clearances.filter((c) => c.status === "cleared" || c.status === "not_applicable").length;
 
   return (
-    <Panel title="Clearances, then NOC" icon={ShieldCheck} aside={<span className="text-xs text-muted-foreground tabular">{done}/{clearances.length} recorded</span>}>
+    <Panel title="Clearances, then NOC / sanction" icon={ShieldCheck} aside={<span className="text-xs text-muted-foreground tabular">{done}/{clearances.length} recorded</span>}>
       <p className="border-b px-4 py-2 text-[11px] text-muted-foreground">
-        PGRC and Vigilance Cell clearances as applicable come first; the Approval Bureau NOC (FDR/RPGF) or sanction order (RTGS) is a separate record that follows them. All responses are SIMULATED.
+        Clearance outcomes from PGRC, the Vigilance Cell and other applicable cells/bureaus come first — any can be recorded Not applicable with a
+        reason. Then, as separate records, the Approval Bureau NOC (FDR/RPGF) or Council sanction order (RTGS). Default applicability is demo
+        configuration; all responses are SIMULATED.
       </p>
       <ul className="divide-y">
         {clearances.map((c) => (

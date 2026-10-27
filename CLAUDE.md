@@ -59,7 +59,7 @@ Wow comes from craft and working depth. Reference feel: Linear, Stripe Dashboard
 - ~25 instruments: FDR/RPGF/RTGS, banks (SBI, Canara Bank, Indian Bank, etc.), amounts ₹5L–₹1.5Cr, maturity dates spread over the next 120 days from today.
 - Demo cases that must exist: clean case · missing-document case · amount/date mismatch case · release request pending clearances · 3-generation renewal lineage · released & closed case.
 - Documents with extracted fields: `{field, value, confidence, region:{x,y,w,h}}`.
-- Clearances: PGRC and Vigilance Cell as applicable, then the Approval Bureau NOC / sanction order as a separate record — with statuses from brief §7.4. No universal Finance clearance.
+- Clearances: PGRC, Vigilance Cell and other applicable cells/bureaus (not a closed list; each may be Not applicable with a reason), then as separate records the Approval Bureau NOC (FDR/RPGF) or Council sanction order (RTGS) — with statuses from brief §7.4. No universal Finance clearance. Default applicability is demo configuration.
 - Replacements: see `docs/replacement-impact.md` (impact checks, evidence versions, affected reviews, stale-decision guard).
 - ~40 seeded audit events forming a valid hash chain.
 

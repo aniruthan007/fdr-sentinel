@@ -304,11 +304,13 @@ export interface ReleaseRequest {
 }
 
 /**
- * Clause 6.46 (per the project brief): clearances from PGRC, the Vigilance Cell and other relevant cells "as
- * applicable", then — separately — the Approval Bureau NOC (FDR/RPGF) or sanction order (RTGS). Finance is not
- * listed as a universal requirement, so the demo does not model it.
+ * Clause 6.46 (per the project brief and the supplied handbook extracts): clearance outcomes from PGRC, the Vigilance
+ * Cell and OTHER relevant cells/bureaus, as applicable; then, as separate final records, the Approval Bureau NOC for
+ * FDR/RPGF or the Council sanction order for RTGS. `other_applicable` keeps the list open-ended: an official records
+ * which other cell applies (Cleared, with reference) or why none does (Not applicable, with reason).
+ * Finance is not listed as a universal requirement, so the demo does not model it.
  */
-export type ClearanceDepartment = "pgrc" | "vigilance_cell" | "approval_bureau";
+export type ClearanceDepartment = "pgrc" | "vigilance_cell" | "other_applicable" | "approval_bureau" | "council_sanction";
 
 export interface ClearanceRecord {
   id: string;

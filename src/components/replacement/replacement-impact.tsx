@@ -94,11 +94,11 @@ export function ReplacementImpactView({ impact, obligationLabel, compact }: { im
           <dd>{impact.requiredPaise === null ? <span className="text-status-warning">Unknown</span> : <MoneyText paise={impact.requiredPaise} />}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Other accepted</dt>
+          <dt className="text-muted-foreground">Other accepted in force</dt>
           <dd><MoneyText paise={impact.otherAcceptedPaise} /></dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Coverage after</dt>
+          <dt className="text-muted-foreground">Coverage {impact.evaluationDate ? `on ${formatDate(impact.evaluationDate)}` : "after"}</dt>
           <dd><MoneyText paise={impact.coverageAfterPaise} /></dd>
         </div>
         <div>
@@ -125,8 +125,9 @@ export function ReplacementImpactView({ impact, obligationLabel, compact }: { im
       {!compact && (
         <p className="text-[11px] text-pretty text-muted-foreground">
           Demo assumptions, not statutory rules: coverage runs from deposit date to maturity date inclusive (IST calendar days); the successor is
-          needed from the day after the original matures; no grace period is assumed. The original is never counted alongside its own
-          replacement, and candidates still under review are not counted.
+          needed from the day after the original matures; no grace period is assumed. Amounts are compared on one day — the handover, or the
+          successor&apos;s deposit date if later — counting only instruments in force that day. The original is never counted alongside its own
+          replacement, and candidates still under review are not counted. Later maturities of other instruments are noted, not assessed.
         </p>
       )}
     </div>
