@@ -154,7 +154,7 @@ export default function InstitutionOverviewPage() {
             </li>
           ))}
         </ol>
-        <p className="text-xs text-muted-foreground">Every entry is part of the tamper-evident audit chain.</p>
+        <p className="text-xs text-muted-foreground">Every entry is part of the hash-chained audit log (tamper-evident in this browser demo, not tamper-proof).</p>
       </section>
 
     </div>

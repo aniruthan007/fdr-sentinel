@@ -225,7 +225,7 @@ export function MarkReadyDialog({ caseId, trigger }: Trigger & { caseId: string 
 // Approver
 // ---------------------------------------------------------------------------------------------
 
-export function DecisionDialog({ caseId, caseRef, suggestedRef, trigger }: Trigger & { caseId: string; caseRef: string; suggestedRef: string }) {
+export function DecisionDialog({ caseId, caseRef, suggestedRef, basis, trigger }: Trigger & { caseId: string; caseRef: string; suggestedRef: string; basis: string }) {
   const recordDecision = useDemoStore((s) => s.recordDecision);
   const [decision, setDecision] = useState<"approved" | "rejected" | null>(null);
   const [reason, setReason] = useState("");
@@ -245,7 +245,7 @@ export function DecisionDialog({ caseId, caseRef, suggestedRef, trigger }: Trigg
         setRef(suggestedRef);
       }}
       canSubmit={!!decision && reason.trim().length > 0 && ref.trim().length > 0}
-      onSubmit={() => recordDecision({ caseId, decision: decision!, reason, referenceNo: ref })}
+      onSubmit={() => recordDecision({ caseId, decision: decision!, reason, referenceNo: ref, basis })}
     >
       <Field label="Decision">
         <ChoiceGroup

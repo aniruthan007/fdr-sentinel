@@ -18,7 +18,7 @@ export function SiteNav() {
         <div className="flex min-w-0 items-center gap-3">
           <Brand href="/" />
           <span className="hidden h-4 w-px bg-border sm:block" aria-hidden />
-          <span className="hidden truncate text-xs text-muted-foreground sm:block">Team Mavericks · SIH 2026</span>
+          <span className="hidden truncate text-xs text-muted-foreground sm:block">Team MAVERICKS · SIH1277</span>
         </div>
         <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Sections">
           {LINKS.map((l) => (

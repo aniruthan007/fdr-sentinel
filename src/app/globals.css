@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * FDR Sentinel design tokens — "premium, quiet, credible" (CLAUDE.md §5).
+ * Deposit Docket design tokens — "premium, quiet, credible" (CLAUDE.md §5).
  * Neutral canvas, white surfaces, one ink-blue primary (#1E3A8A family),
  * semantic status colours. Every token is redefined for dark mode.
  */

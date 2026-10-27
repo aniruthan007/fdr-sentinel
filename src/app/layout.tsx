@@ -8,17 +8,17 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "FDR Sentinel — Security Deposit & FDR Management (Prototype)", template: "%s · FDR Sentinel" },
+  title: { default: "Deposit Docket — Security Deposit & FDR Management Portal (Prototype)", template: "%s · Deposit Docket" },
   description:
-    "Prototype portal for tracking security-deposit obligations, FDR instruments, maturity, renewals and releases for technical institutions. SIH 2026 · Team Mavericks. Demo data only.",
-  applicationName: "FDR Sentinel",
+    "Prototype portal for continuing security-deposit obligations, FDR instruments, replacements and releases. Every replacement linked. Every decision backed by current evidence. SIH 2026 · Team MAVERICKS (SIH1277). Synthetic data; not connected to AICTE or any bank.",
+  applicationName: "Deposit Docket",
   openGraph: {
-    title: "FDR Sentinel — every security deposit, tracked from submission to release",
-    description: "Evidence-linked verification, maturity tracking, clearance-backed release and a tamper-evident audit chain. SIH 2026 prototype by Team Mavericks — demo data only.",
+    title: "Deposit Docket — every replacement linked, every decision backed by current evidence",
+    description: "Replacement-impact checks, evidence-version reviews and stale-decision guards for security deposits. SIH 2026 prototype by Team MAVERICKS (SIH1277) — synthetic data only.",
     type: "website",
-    siteName: "FDR Sentinel",
+    siteName: "Deposit Docket",
   },
-  twitter: { card: "summary", title: "FDR Sentinel", description: "Security Deposit & FDR Management — SIH 2026 prototype, demo data only." },
+  twitter: { card: "summary", title: "Deposit Docket", description: "Security Deposit & FDR Management Portal — SIH 2026 prototype, synthetic data only." },
 };
 
 export const viewport: Viewport = {

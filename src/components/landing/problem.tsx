@@ -10,12 +10,12 @@ const PAINS = [
   {
     icon: CalendarX2,
     title: "Maturities slip past",
-    body: "An FDR that matures unnoticed leaves a deposit unsecured. Nobody is reminded until someone happens to look.",
+    body: "An FDR can mature without a recorded successor, and nobody notices until someone happens to look. That needs review, not guesswork.",
   },
   {
     icon: History,
     title: "History breaks at every renewal",
-    body: "A renewed FDR replaces the old record instead of linking to it. There is no tamper-evident trail of who changed what, and when.",
+    body: "A replacement FDR can overwrite the old record instead of linking to it — and a lower amount or a late deposit date is easy to miss. The original's confirmation can be mistaken for the new one's.",
   },
   {
     icon: MailQuestion,

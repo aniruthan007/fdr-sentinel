@@ -34,7 +34,7 @@ export function SiteFooter() {
       <Container className="flex flex-col gap-6 py-10 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <Brand href="/" />
-          <p className="text-sm text-muted-foreground">Team Mavericks · Smart India Hackathon 2026</p>
+          <p className="text-sm text-muted-foreground">Team MAVERICKS · Team ID SIH1277 · Smart India Hackathon 2026</p>
           <p className="text-xs text-muted-foreground italic">Not following the pack.</p>
         </div>
         <p className="max-w-md text-xs text-pretty text-muted-foreground sm:text-right">

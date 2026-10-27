@@ -30,6 +30,7 @@ export const OBLIGATION_KIND_LABELS: Record<ObligationKind, string> = {
   establishment: "Establishment",
   intake_increase: "Intake increase",
   new_programme: "New programme",
+  additional_course: "Additional course",
 };
 
 const CASE_TYPE_LABELS: Record<VerificationCase["type"], string> = {

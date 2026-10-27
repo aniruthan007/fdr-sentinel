@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { verifyChain } from "@/lib/audit-chain";
 import { evidenceRows } from "@/lib/evidence";
+import { decisionBasis, encodeBasis } from "@/lib/reviews";
 import { can } from "@/lib/authz";
 import { formatDate, todayIST } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
@@ -14,6 +15,8 @@ const RELEASE_DOCS = [
   { kind: "affidavit" as const, fileName: "affidavit-6.pdf", sizeBytes: 98_000 },
 ];
 const data = () => store().data!;
+/** What the approver's screen captures when the case is opened. */
+const basisOf = (caseId: string) => (store().data ? encodeBasis(decisionBasis(store().data!, caseId)) : "");
 
 beforeEach(async () => {
   useDemoStore.setState({ data: await buildSeed(todayIST()), session: null, status: "ready" });
@@ -77,7 +80,7 @@ describe("commands", () => {
   it("rejects a command the role may not perform, without writing", async () => {
     store().enterAs("u-aud");
     const before = data().audit.length;
-    const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: "DC/X/1" });
+    const r = await store().recordDecision({ basis: basisOf("vc-02"), caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: "DC/X/1" });
     expect(r.ok).toBe(false);
     expect(data().audit).toHaveLength(before);
   });
@@ -90,7 +93,7 @@ describe("commands", () => {
 
   it("runs a clean approval and appends hash-chained events", async () => {
     store().enterAs("u-ap");
-    const r = await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "All fields match.", referenceNo: "DC/VER/2026/0142" });
+    const r = await store().recordDecision({ basis: basisOf("vc-02"), caseId: "vc-02", decision: "approved", reason: "All fields match.", referenceNo: "DC/VER/2026/0142" });
     expect(r).toEqual({ ok: true, id: "vc-02" });
     // Under review → Verified → Active, each an explicit, recorded transition (brief §7.2).
     expect(data().instruments.find((i) => i.id === "fdr-wgce-01")!.status).toBe("active");
@@ -102,29 +105,32 @@ describe("commands", () => {
 
   it("requires a reason and a reference number for every decision", async () => {
     store().enterAs("u-ap");
-    expect((await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: " " })).ok).toBe(false);
+    expect((await store().recordDecision({ basis: basisOf("vc-02"), caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: " " })).ok).toBe(false);
     expect(data().cases.find((c) => c.id === "vc-02")!.status).toBe("ready_for_decision");
-    expect((await store().recordDecision({ caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: "DC/VER/1" })).ok).toBe(true);
+    expect((await store().recordDecision({ basis: basisOf("vc-02"), caseId: "vc-02", decision: "approved", reason: "ok", referenceNo: "DC/VER/1" })).ok).toBe(true);
     expect(data().cases.find((c) => c.id === "vc-02")!.decision).toMatchObject({ referenceNo: "DC/VER/1", decidedBy: "u-ap" });
   });
 
-  it("uses the six Clause 6.46 items and the four brief clearance sources", () => {
+  it("uses the six Clause 6.46 items; clearances are PGRC and Vigilance, then the NOC — no universal Finance clearance", () => {
     const items = data().checklistRequirements.filter((r) => r.checklist === "clause_6_46");
     expect(items).toHaveLength(6);
     expect(items.every((r) => r.provenance === "brief")).toBe(true);
-    expect(new Set(data().clearances.map((c) => c.department))).toEqual(new Set(["pgrc", "vigilance_cell", "approval_bureau", "finance"]));
+    expect(new Set(data().clearances.map((c) => c.department))).toEqual(new Set(["pgrc", "vigilance_cell", "approval_bureau"]));
+    // Non-6.46 checklists are labelled demo configuration and are not presented as Annexure-1/2.
+    const others = data().checklistRequirements.filter((r) => r.checklist !== "clause_6_46");
+    expect(others.every((r) => r.provenance === "demo_config" && !/^Annexure/.test(r.sourceClause))).toBe(true);
   });
 
   it("refuses approval while a critical finding is open", async () => {
     store().enterAs("u-ap");
-    const r = await store().recordDecision({ caseId: "vc-01", decision: "approved", reason: "x", referenceNo: "DC/X/2" });
+    const r = await store().recordDecision({ basis: basisOf("vc-01"), caseId: "vc-01", decision: "approved", reason: "x", referenceNo: "DC/X/2" });
     expect(r.ok).toBe(false);
   });
 
   it("completes a release: clearances → ready for authorised decision → approved", async () => {
     store().enterAs("u-co");
     const outstanding = data().clearances.filter((x) => x.releaseRequestId === "rr-01" && x.status !== "cleared");
-    expect(outstanding.map((c) => c.status).sort()).toEqual(["further_info_required", "pending"]);
+    expect(outstanding.map((c) => c.status).sort()).toEqual(["further_info_required", "pending", "pending"]);
     for (const c of outstanding) {
       expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `REF/${c.id}`, remarks: "" })).ok).toBe(true);
     }
@@ -133,7 +139,7 @@ describe("commands", () => {
     expect(data().checklistItems.filter((i) => i.caseId === "vc-05").every((i) => i.status === "satisfied")).toBe(true);
 
     store().enterAs("u-ap");
-    expect((await store().recordDecision({ caseId: "vc-05", decision: "approved", reason: "Release.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
+    expect((await store().recordDecision({ basis: basisOf("vc-05"), caseId: "vc-05", decision: "approved", reason: "Release.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
     expect(data().releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("approved");
     expect(data().instruments.find((i) => i.id === "fdr-kit-06")!.status).toBe("released");
     expect((await verifyChain(data().audit)).ok).toBe(true);
@@ -156,7 +162,7 @@ describe("commands", () => {
     const rr = data().releaseRequests.at(-1)!;
     expect(rr.status).toBe("submitted");
     const clearances = data().clearances.filter((c) => c.releaseRequestId === rr.id);
-    expect(clearances).toHaveLength(4);
+    expect(clearances).toHaveLength(3);
     expect(clearances.every((c) => c.status === "not_requested" && c.source === "SIMULATED")).toBe(true);
   });
 
@@ -211,7 +217,7 @@ describe("commands", () => {
 
   it("records checklist outcomes, never manually for clearance-backed items", async () => {
     store().enterAs("u-po");
-    const affidavit = data().checklistItems.find((i) => i.caseId === "vc-03" && i.requirementId === "req-a1-02")!;
+    const affidavit = data().checklistItems.find((i) => i.caseId === "vc-03" && i.requirementId === "req-dl-02")!;
     expect((await store().recordChecklistOutcome({ itemId: affidavit.id, outcome: "not_applicable", note: "" })).ok).toBe(false);
     expect((await store().recordChecklistOutcome({ itemId: affidavit.id, outcome: "satisfied", evidenceDocumentId: "doc-dpip-loa" })).ok).toBe(true);
     const clearanceItem = data().checklistItems.find((i) => i.caseId === "vc-05" && i.requirementId === "req-646-05")!;
@@ -242,7 +248,7 @@ describe("commands", () => {
       expect((await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: `REF/${c.department}`, remarks: "" })).ok).toBe(true);
     }
     store().enterAs("u-ap");
-    expect((await store().recordDecision({ caseId: "vc-05", decision: "approved", reason: "All Clause 6.46 items and clearances recorded.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
+    expect((await store().recordDecision({ basis: basisOf("vc-05"), caseId: "vc-05", decision: "approved", reason: "All Clause 6.46 items and clearances recorded.", referenceNo: "DC/REL/2026/0027" })).ok).toBe(true);
     const d = data();
     expect(d.releaseRequests.find((r) => r.id === "rr-01")!.status).toBe("approved");
     expect(d.cases.find((c) => c.id === "vc-05")).toMatchObject({ status: "approved", decision: { referenceNo: "DC/REL/2026/0027" } });
@@ -322,7 +328,7 @@ describe("commands", () => {
       await store().recordClearance({ clearanceId: c.id, outcome: "cleared", reference: "R/1", remarks: "" });
     }
     store().enterAs("u-ap");
-    expect((await store().recordDecision({ caseId: rr.caseId, decision: "approved", reason: "ok", referenceNo: "DC/REL/1" })).ok).toBe(true);
+    expect((await store().recordDecision({ basis: basisOf(rr.caseId), caseId: rr.caseId, decision: "approved", reason: "ok", referenceNo: "DC/REL/1" })).ok).toBe(true);
     // fdr-kit-03 (₹50 L) still stands against the ₹1.25 Cr establishment obligation.
     expect(data().obligations.find((o) => o.id === "ob-kit-est")!.status).toBe("partially_secured");
   });

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ChoiceGroup, Field, FormDialog } from "@/components/official/form-dialog";
@@ -10,6 +11,12 @@ import { formatINR } from "@/lib/money";
 import { useDemoStore, type Attachment } from "@/store/demo-store";
 import type { DocumentKind, FinancialInstrument } from "@/types";
 import { FilePicker } from "./file-picker";
+import { OBLIGATION_KIND_LABELS } from "@/components/tables/columns";
+import { ReplacementImpactView } from "@/components/replacement/replacement-impact";
+import { JUDGE_SCENARIO, scenarioDraftDates, scenarioResolvedDates } from "@/data/scenario";
+import type { DemoData } from "@/data/seed";
+import { replacementImpact } from "@/lib/replacement-impact";
+import { useDemoData } from "@/store/hooks";
 
 type Trigger = { trigger: React.ReactNode };
 
@@ -115,26 +122,58 @@ export function RespondToCorrectionDialog({ caseId, caseRef, instrumentNo, reque
 }
 
 // ---------------------------------------------------------------------------------------------
-// Renew an instrument
+// Replace (renew) an instrument — with a live replacement-impact preview of the draft
 // ---------------------------------------------------------------------------------------------
 
+function obligationLabelFor(d: DemoData, obligationId: string): string {
+  const ob = d.obligations.find((o) => o.id === obligationId);
+  if (!ob) return "—";
+  return `${OBLIGATION_KIND_LABELS[ob.kind]} deposit · AY ${ob.academicYear} · ${formatINR(ob.requiredPaise)} required (demo configuration)`;
+}
+
+function parsePaise(rupees: string): number {
+  return Math.round(Number(rupees.replace(/,/g, "")) * 100);
+}
+
 export function RenewDialog({ instrument, trigger }: Trigger & { instrument: FinancialInstrument }) {
+  const d = useDemoData();
   const renew = useDemoStore((s) => s.renewInstrument);
   const [no, setNo] = useState("");
   const [rupees, setRupees] = useState("");
   const [issue, setIssue] = useState("");
   const [maturity, setMaturity] = useState("");
   const [file, setFile] = useState<Attachment | null>(null);
-  const paise = Math.round(Number(rupees.replace(/,/g, "")) * 100);
-  const valid = no.trim().length > 0 && Number.isFinite(paise) && paise > 0 && !!issue && !!maturity && !!file;
+  const paise = parsePaise(rupees);
+  const valid = no.trim().length > 0 && Number.isFinite(paise) && paise > 0 && !!issue && !!maturity && maturity > issue && !!file;
+  const isScenario = instrument.id === JUDGE_SCENARIO.originalId && !!instrument.maturityDate;
+  const impact = useMemo(
+    () =>
+      Number.isFinite(paise) && paise > 0
+        ? replacementImpact(d, instrument.id, {
+            draft: { instrumentNo: no.trim() || "New instrument", bankName: instrument.bankName, amountPaise: paise, issueDate: issue || null, maturityDate: maturity || null },
+            draftHasReceipt: !!file,
+          })
+        : null,
+    [d, instrument, no, paise, issue, maturity, file],
+  );
+
+  function fillScenario() {
+    const dates = scenarioDraftDates(instrument);
+    setNo(JUDGE_SCENARIO.successorNo);
+    setRupees(String(JUDGE_SCENARIO.draftAmountRupees));
+    setIssue(dates.issueDate);
+    setMaturity(dates.maturityDate);
+    setFile({ kind: "fdr_receipt", fileName: `${slug(JUDGE_SCENARIO.successorNo)}-receipt.pdf`, sizeBytes: 164_000 });
+  }
 
   return (
     <FormDialog
+      wide
       trigger={trigger}
-      title={`Renew ${instrument.instrumentNo}`}
-      description="The renewed FDR is linked to this one; nothing is overwritten. It becomes active after an officer verifies it and the Approver decides."
-      submitLabel="Submit renewal"
-      successMessage="Renewal submitted for verification"
+      title={`Replace ${instrument.instrumentNo}`}
+      description="The replacement is linked to this instrument and nothing is overwritten. This one stays in force until an authorised decision accepts the replacement. Renewal remains subject to applicable policy and review."
+      submitLabel="Submit replacement"
+      successMessage="Replacement submitted for review"
       onOpenChange={(o) => {
         if (!o) return;
         const today = todayIST();
@@ -147,7 +186,13 @@ export function RenewDialog({ instrument, trigger }: Trigger & { instrument: Fin
       canSubmit={valid}
       onSubmit={() => renew({ predecessorId: instrument.id, instrumentNo: no, amountPaise: paise, issueDate: issue, maturityDate: maturity, receipt: file ?? undefined })}
     >
-      <Field label="New FDR number" htmlFor="rn-no">
+      {isScenario && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          <span>Judge scenario: a ₹20 lakh replacement deposited 15 days after maturity.</span>
+          <Button type="button" size="xs" variant="outline" onClick={fillScenario}>Fill scenario values</Button>
+        </div>
+      )}
+      <Field label="New instrument number" htmlFor="rn-no">
         <Input id="rn-no" value={no} onChange={(e) => setNo(e.target.value)} className="font-mono" placeholder={`e.g. ${instrument.instrumentNo.replace(/\d+$/, "400001")}`} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -161,9 +206,100 @@ export function RenewDialog({ instrument, trigger }: Trigger & { instrument: Fin
           <Input id="rn-mat" type="date" value={maturity} onChange={(e) => setMaturity(e.target.value)} />
         </Field>
       </div>
-      <Field label="Receipt of the renewed FDR">
-        <FilePicker kind="fdr_receipt" value={file} onChange={setFile} sampleName={`${slug(no || "renewed-fdr")}-receipt`} />
+      <Field label="Receipt of the replacement instrument">
+        <FilePicker kind="fdr_receipt" value={file} onChange={setFile} sampleName={`${slug(no || "replacement-fdr")}-receipt`} />
       </Field>
+      {impact && (
+        <section aria-label="Replacement impact preview" className="space-y-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">Replacement draft · impact preview</h3>
+          <ReplacementImpactView impact={impact} obligationLabel={obligationLabelFor(d, instrument.obligationId)} compact />
+          <p className="text-[11px] text-muted-foreground">You can still submit: an official reviews every finding. Nothing here is a decision.</p>
+        </section>
+      )}
+    </FormDialog>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Amend a replacement that has not been decided — creates a new evidence version
+// ---------------------------------------------------------------------------------------------
+
+export function AmendReplacementDialog({ successor, trigger }: Trigger & { successor: FinancialInstrument }) {
+  const d = useDemoData();
+  const amend = useDemoStore((s) => s.amendReplacement);
+  const original = d.instruments.find((i) => i.id === successor.predecessorInstrumentId);
+  const [rupees, setRupees] = useState("");
+  const [issue, setIssue] = useState("");
+  const [maturity, setMaturity] = useState("");
+  const [file, setFile] = useState<Attachment | null>(null);
+  const [note, setNote] = useState("");
+  const paise = parsePaise(rupees);
+  const isScenario = original?.id === JUDGE_SCENARIO.originalId && !!original.maturityDate;
+  const preview = useMemo(() => {
+    if (!original || !(paise > 0)) return null;
+    // Preview with the amended values; evidence checks apply after the new receipt is submitted.
+    return replacementImpact(d, original.id, { draft: { instrumentNo: successor.instrumentNo, bankName: successor.bankName, amountPaise: paise, issueDate: issue || null, maturityDate: maturity || null }, draftHasReceipt: !!file });
+  }, [d, original, successor, paise, issue, maturity, file]);
+  const valid = Number.isFinite(paise) && paise > 0 && !!issue && !!maturity && maturity > issue && !!file && note.trim().length > 0;
+
+  function fillScenario() {
+    if (!original) return;
+    const dates = scenarioResolvedDates(original);
+    setRupees(String(JUDGE_SCENARIO.resolvedAmountRupees));
+    setIssue(dates.issueDate);
+    setMaturity(dates.maturityDate);
+    setFile({ kind: "fdr_receipt", fileName: `${slug(successor.instrumentNo)}-receipt-revised.pdf`, sizeBytes: 171_000 });
+    setNote("Bank reissued the deposit for ₹25,00,000 dated on the original's maturity date.");
+  }
+
+  return (
+    <FormDialog
+      wide
+      trigger={trigger}
+      title={`Amend replacement ${successor.instrumentNo}`}
+      description="Amended values need their own receipt. The earlier declaration and receipt stay on record, and the affected reviews start again for the new evidence version."
+      submitLabel="Submit amendment"
+      successMessage="Amendment submitted; affected reviews reopened"
+      onOpenChange={(o) => {
+        if (!o) return;
+        setRupees(String(successor.amountPaise / 100));
+        setIssue(successor.issueDate);
+        setMaturity(successor.maturityDate ?? "");
+        setFile(null);
+        setNote("");
+      }}
+      canSubmit={valid}
+      onSubmit={() => amend({ successorId: successor.id, amountPaise: paise, issueDate: issue, maturityDate: maturity, receipt: file!, note })}
+    >
+      {isScenario && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          <span>Judge scenario: the permitted resolution — ₹25 lakh deposited on the original&apos;s maturity date.</span>
+          <Button type="button" size="xs" variant="outline" onClick={fillScenario}>Fill resolution values</Button>
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Amount (₹)" htmlFor="am-amt" hint={Number.isFinite(paise) && paise > 0 ? formatINR(paise) : undefined}>
+          <Input id="am-amt" inputMode="decimal" value={rupees} onChange={(e) => setRupees(e.target.value)} className="font-mono" />
+        </Field>
+        <Field label="Date of deposit" htmlFor="am-issue">
+          <Input id="am-issue" type="date" value={issue} onChange={(e) => setIssue(e.target.value)} />
+        </Field>
+        <Field label="Date of maturity" htmlFor="am-mat">
+          <Input id="am-mat" type="date" value={maturity} onChange={(e) => setMaturity(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Revised receipt (new evidence version)">
+        <FilePicker kind="fdr_receipt" value={file} onChange={setFile} sampleName={`${slug(successor.instrumentNo)}-receipt-revised`} />
+      </Field>
+      <Field label="What changed and why" htmlFor="am-note">
+        <Textarea id="am-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="e.g. Bank reissued the deposit for the full amount." />
+      </Field>
+      {preview && original && (
+        <section aria-label="Amended impact preview" className="space-y-2 border-t pt-4">
+          <h3 className="text-sm font-semibold">Impact preview with amended values</h3>
+          <ReplacementImpactView impact={preview} obligationLabel={obligationLabelFor(d, original.obligationId)} compact />
+        </section>
+      )}
     </FormDialog>
   );
 }

@@ -1,5 +1,34 @@
 # Implementation status
 
+## Deposit Docket upgrade ✅ (branch `ccr-a039f13a-829e6f`, PR to `main`)
+
+**Done**
+- Renamed to **Deposit Docket**, Security Deposit & FDR Management Portal, Team MAVERICKS (SIH1277). Banner:
+  *PROTOTYPE · SYNTHETIC DATA · NOT CONNECTED TO AICTE OR ANY BANK*. Repository name and domain unchanged.
+- Replacement impact (`src/lib/replacement-impact.ts`) in the replacement form (live draft preview), the
+  institution's instrument page and the official case workbench.
+- Per-instrument, per-evidence-version reviews (`src/lib/reviews.ts`); successor starts with its own pending
+  reviews; affected reviews reopen when a receipt changes; ready cases return to review.
+- New commands: `amendReplacement` (Institution Owner) and `requestBankConfirmation` (Processing Officer,
+  SIMULATED). `recordDecision` requires a decision basis and rejects stale transitions; approval re-checks
+  holds, clearances and replacement impact.
+- Policy corrections: no Annexure-1/2 labels on generic checklists; no universal Finance clearance; NOC after
+  clearances; reminder windows labelled product settings; "unsecured" replaced with "matured without a
+  recorded successor — review required".
+- Judge scenario seed (`ob-kit-lab`, `fdr-kit-07`), `/enter` demo guide and "Start judge scenario" restart.
+- Fixed a pre-existing hydration mismatch on `/` under reduced motion (lifecycle hint text).
+
+**Verified**
+- `pnpm test` 48/48 (30 existing, 18 new), lint, typecheck, build clean. Mutation checks: disabling the stale
+  guard fails 2 tests; double-counting the original fails 3.
+- Playwright, one browser: full judge scenario across Institution → Officer → Institution → Officer → Approver →
+  Institution; two-tab stale-decision rejection; changed pages at 375/1440 px, light/dark, reduced motion: no
+  horizontal overflow, no console errors.
+
+**Not done / limits**
+- Browser-only: no server, no shared database; controls are prototype controls, not server-side security.
+- Lighthouse not re-run after this change.
+
 Build order: 1 → 2 → **4** → 3 → 5 (Official Portal before Institution Portal, by request).
 
 ## Phase 5 — Polish and release ✅ (deployment pending)

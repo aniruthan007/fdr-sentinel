@@ -4,6 +4,7 @@ import type { DemoData } from "@/data/seed";
 import type { DocumentExtraction, ExtractionField, FinancialInstrument } from "@/types";
 import { formatDate } from "./dates";
 import { formatINR } from "./money";
+import { currentDocument } from "./reviews";
 
 const FIELDS: ExtractionField[] = ["instrument_no", "amount", "issue_date", "maturity_date", "bank_name", "beneficiary", "lien_holder"];
 
@@ -40,10 +41,8 @@ export interface EvidenceRow {
 
 /** Declared vs extracted vs on-record, one row per extracted field (CLAUDE.md §5.4). */
 export function evidenceRows(d: DemoData, inst: FinancialInstrument): EvidenceRow[] {
-  // The latest receipt is compared; earlier ones stay on file as history.
-  const receipt = d.documents
-    .filter((x) => x.instrumentId === inst.id && x.kind === "fdr_receipt")
-    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
+  // The current evidence version is compared; earlier versions stay on file as history.
+  const receipt = currentDocument(d, inst.id);
   const extractions = receipt ? d.extractions.filter((e) => e.documentId === receipt.id) : [];
   const institution = d.institutions.find((i) => i.id === inst.institutionId);
   const obligation = d.obligations.find((o) => o.id === inst.obligationId);
@@ -102,5 +101,6 @@ export function caseEntityIds(d: DemoData, caseId: string): Set<string> {
     }
   }
   for (const r of d.renewals) if (c.instrumentIds.includes(r.successorInstrumentId)) ids.add(r.id);
+  for (const r of d.reviews) if (c.instrumentIds.includes(r.instrumentId)) ids.add(r.id);
   return ids;
 }

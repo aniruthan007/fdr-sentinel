@@ -5,11 +5,17 @@ import type { SeedContext } from "./context";
 export const CLEARANCE_DEPARTMENT_LABELS: Record<ClearanceDepartment, string> = {
   pgrc: "PGRC",
   vigilance_cell: "Vigilance Cell",
-  approval_bureau: "Approval Bureau",
-  finance: "Finance",
+  approval_bureau: "Approval Bureau NOC / sanction order",
 };
 
-export const CLEARANCE_DEPARTMENTS = Object.keys(CLEARANCE_DEPARTMENT_LABELS) as ClearanceDepartment[];
+/** Created in this order; the NOC is always last because it follows the clearances. */
+export const CLEARANCE_DEPARTMENTS: ClearanceDepartment[] = ["pgrc", "vigilance_cell", "approval_bureau"];
+
+/**
+ * Clearances that must be recorded before the Approval Bureau NOC (FDR/RPGF) or sanction order (RTGS). Other cells
+ * "as applicable" (brief §3.5) are not configured in this demo.
+ */
+export const PRE_NOC_CLEARANCES: ClearanceDepartment[] = ["pgrc", "vigilance_cell"];
 
 export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
   return [
@@ -47,14 +53,12 @@ export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
 type ClearanceRow = [rr: string, dept: ClearanceDepartment, status: ClearanceRecord["status"], reference: string | null, remarks: string | null, offset: number | null];
 
 const CLEARANCES: ClearanceRow[] = [
-  ["rr-01", "finance", "cleared", "FIN/NDC/2026/0418", "No outstanding dues on record.", -9],
-  ["rr-01", "approval_bureau", "cleared", "AB/NOC/2026/0093", "NOC issued: programme closure recorded for AY 2026-27.", -8],
   ["rr-01", "pgrc", "pending", null, null, null],
   ["rr-01", "vigilance_cell", "further_info_required", null, "Copy of the programme closure order requested.", -7],
-  ["rr-02", "finance", "cleared", "FIN/NDC/2026/0117", "No outstanding dues on record.", -55],
-  ["rr-02", "approval_bureau", "cleared", "AB/NOC/2026/0031", "NOC issued: closure approved.", -52],
+  ["rr-01", "approval_bureau", "pending", null, null, null],
   ["rr-02", "pgrc", "cleared", "PGRC/CLR/2026/0052", "No open grievances.", -48],
   ["rr-02", "vigilance_cell", "cleared", "VIG/CLR/2026/0040", "Nothing adverse on record.", -41],
+  ["rr-02", "approval_bureau", "cleared", "AB/NOC/2026/0031", "NOC recorded after clearances: closure approved.", -38],
 ];
 
 export function buildClearances(ctx: SeedContext): ClearanceRecord[] {
@@ -82,6 +86,8 @@ export function buildRenewals(ctx: SeedContext): RenewalReplacement[] {
       predecessorInstrumentId: "fdr-kit-01",
       successorInstrumentId: "fdr-kit-02",
       renewedAt: ctx.t(-730, 12, 0),
+      effectiveFrom: ctx.d(-730),
+      caseId: null,
       recordedBy: "u-po",
     },
     {
@@ -90,7 +96,9 @@ export function buildRenewals(ctx: SeedContext): RenewalReplacement[] {
       predecessorInstrumentId: "fdr-kit-02",
       successorInstrumentId: "fdr-kit-03",
       renewedAt: ctx.t(-360, 12, 30),
-      recordedBy: "u-po",
+      effectiveFrom: ctx.d(-365),
+      caseId: "vc-07",
+      recordedBy: "u-ap",
     },
   ];
 }

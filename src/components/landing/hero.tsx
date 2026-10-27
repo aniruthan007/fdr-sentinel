@@ -23,14 +23,15 @@ export function Hero() {
         <div className="space-y-6">
           <p className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground shadow-soft">
             <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-            Security Deposit &amp; FDR Management
+            Deposit Docket · Security Deposit &amp; FDR Management Portal
           </p>
           <h1 className="text-[2.125rem] leading-[1.1] font-semibold tracking-tight text-balance sm:text-5xl">
-            Every security deposit, tracked from submission to release.
+            Every replacement linked. Every decision backed by current evidence.
           </h1>
           <p className="max-w-xl text-pretty text-muted-foreground sm:text-lg">
-            Each FDR is checked against its documents, watched to maturity, and released only once clearances are
-            recorded — with every step sealed in a tamper-evident audit chain.
+            Deposit Docket keeps each continuing deposit obligation separate from the FDRs that secure it. A replacement
+            FDR is checked for apparent shortfalls and date gaps, needs its own evidence, and reaches an authorised
+            decision only on the current state of the case.
           </p>
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <Button asChild size="lg" className="h-10 gap-2 px-4">

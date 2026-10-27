@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import { useState } from "react";
 import { Check, FileText, ScanSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,10 @@ interface EvidenceViewerProps {
 
 /** Signature moment 3: click a field and the document highlights the region it was read from. */
 export function EvidenceViewer({ data, documents, instruments, institutionId, activeField, onActiveFieldChange }: EvidenceViewerProps) {
-  const [docId, setDocId] = useState<string>(() => documents.find((d) => d.kind === "fdr_receipt")?.id ?? documents[0]?.id ?? "");
+  // Earlier evidence versions stay visible as history; the current version is shown unless another is picked.
+  const supersededIds = new Set(documents.map((d) => d.supersedesDocumentId).filter(Boolean));
+  const [picked, setDocId] = useState<string | null>(null);
+  const docId = picked ?? documents.find((d) => d.kind === "fdr_receipt" && !supersededIds.has(d.id))?.id ?? documents[0]?.id ?? "";
   const confirmField = useDemoStore((s) => s.confirmField);
   const { run, busy } = useCommand();
   const canConfirm = useCan("confirmField", institutionId);
@@ -37,6 +41,21 @@ export function EvidenceViewer({ data, documents, instruments, institutionId, ac
     return <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No documents on this case.</p>;
   }
   const extractions = data.extractions.filter((e) => e.documentId === doc.id);
+  const superseded = supersededIds.has(doc.id);
+  const unconfirmed = extractions.filter((e) => !e.confirmedAt);
+  async function confirmAll() {
+    // One command (and one audit event) per field; a single toast for the batch.
+    let n = 0;
+    for (const e of unconfirmed) {
+      const r = await confirmField({ extractionId: e.id });
+      if (!r.ok) {
+        toast.error("Not recorded", { description: r.error });
+        return;
+      }
+      n += 1;
+    }
+    toast.success(`${n} fields confirmed on v${doc.version}`);
+  }
   const instrument = instruments.find((i) => i.id === doc.instrumentId);
   const institution = data.institutions.find((i) => i.id === institutionId);
 
@@ -58,6 +77,9 @@ export function EvidenceViewer({ data, documents, instruments, institutionId, ac
           >
             <FileText className="size-3.5" aria-hidden />
             {DOCUMENT_KIND_LABELS[d.kind]}
+            {(d.version > 1 || supersededIds.has(d.id)) && (
+              <span className={cn("font-mono text-[10px]", supersededIds.has(d.id) && "line-through")}>v{d.version}</span>
+            )}
           </button>
         ))}
       </div>
@@ -74,9 +96,14 @@ export function EvidenceViewer({ data, documents, instruments, institutionId, ac
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="font-mono">{doc.fileName}</span>
         <span className="flex items-center gap-2">
-          Uploaded <DateText at={doc.uploadedAt} /> · <StatusBadge status={doc.status} className="h-5 text-[11px]" />
+          v{doc.version} · Uploaded <DateText at={doc.uploadedAt} /> · <StatusBadge status={doc.status} className="h-5 text-[11px]" />
         </span>
       </div>
+      {superseded && (
+        <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          Superseded by a newer version. Kept as history; reviews of the current version do not rely on it.
+        </p>
+      )}
 
       {extractions.length > 0 ? (
         <div className="rounded-lg border bg-card">
@@ -85,7 +112,14 @@ export function EvidenceViewer({ data, documents, instruments, institutionId, ac
               <ScanSearch className="size-3.5 text-primary" aria-hidden />
               Extracted fields
             </p>
-            <span className="text-[11px] text-muted-foreground">Suggestions only · {extractions[0].source}</span>
+            <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              Suggestions only · {extractions[0].source}
+              {canConfirm && !superseded && unconfirmed.length > 1 && (
+                <Button size="xs" variant="outline" disabled={busy} onClick={confirmAll}>
+                  Confirm all {unconfirmed.length}
+                </Button>
+              )}
+            </span>
           </div>
           <ul className="grid grid-cols-1 divide-y sm:grid-cols-2 sm:divide-y-0">
             {extractions.map((e) => {
@@ -111,7 +145,7 @@ export function EvidenceViewer({ data, documents, instruments, institutionId, ac
                       <span className="shrink-0 text-status-success" title={`Confirmed by ${userName(e.confirmedBy)}`}>
                         <Check className="size-4" aria-label={`Confirmed by ${userName(e.confirmedBy)}`} />
                       </span>
-                    ) : canConfirm ? (
+                    ) : canConfirm && !superseded ? (
                       <Button
                         size="xs"
                         variant="outline"

@@ -50,4 +50,6 @@ export type Action =
   | "markReadyForDecision"
   | "requestClearances"
   | "respondToCorrection"
+  | "amendReplacement"
+  | "requestBankConfirmation"
   | "resetDemo";

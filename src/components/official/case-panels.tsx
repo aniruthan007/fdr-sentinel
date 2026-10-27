@@ -202,6 +202,7 @@ export function FindingsPanel({ data, caseItem }: { data: DemoData; caseItem: Ve
 // ---------------------------------------------------------------------------------------------
 
 const CLEARANCE_BACKED = new Set(["req-646-05", "req-646-06"]);
+const REVIEW_BACKED = new Set(["req-re-02"]);
 
 export function ChecklistPanel({ data, caseItem }: { data: DemoData; caseItem: VerificationCase }) {
   const items = data.checklistItems.filter((i) => i.caseId === caseItem.id);
@@ -211,7 +212,7 @@ export function ChecklistPanel({ data, caseItem }: { data: DemoData; caseItem: V
   const open = !["approved", "rejected", "closed"].includes(caseItem.status);
   const done = items.filter((i) => i.status === "satisfied" || i.status === "not_applicable").length;
   const kind = items[0] ? reqs.get(items[0].requirementId)?.checklist : undefined;
-  const title = kind === "clause_6_46" ? "Clause 6.46 checklist" : kind === "annexure_2" ? "Annexure-2 checklist" : "Annexure-1 checklist";
+  const title = kind === "clause_6_46" ? "Clause 6.46 checklist" : kind === "replacement_evidence" ? "Replacement evidence (demo configuration)" : "Deposit lodgement checklist (demo configuration)";
 
   return (
     <Panel title={title} icon={ShieldCheck} aside={<span className="text-xs text-muted-foreground tabular">{done}/{items.length}</span>}>
@@ -243,13 +244,15 @@ export function ChecklistPanel({ data, caseItem }: { data: DemoData; caseItem: V
                   <p className="text-[11px] text-muted-foreground" title={req.sourceClause}>
                     {CLEARANCE_BACKED.has(req.id)
                       ? "Satisfied by recorded clearances"
-                      : evidence
+                      : REVIEW_BACKED.has(req.id)
+                        ? item.note ?? "Satisfied by a recorded bank confirmation on the current receipt"
+                        : evidence
                         ? `Evidence: ${DOCUMENT_KIND_LABELS[evidence.kind]}`
                         : item.note ?? (item.status === "pending" ? "Not yet checked" : "")}
                     {item.checkedBy && ` · ${userName(item.checkedBy)}`}
                   </p>
                 </div>
-                {canRecord && open && !CLEARANCE_BACKED.has(req.id) && item.status !== "satisfied" && (
+                {canRecord && open && !CLEARANCE_BACKED.has(req.id) && !REVIEW_BACKED.has(req.id) && item.status !== "satisfied" && (
                   <ChecklistOutcomeDialog itemId={item.id} requirement={req} documents={docs} trigger={<Button size="xs" variant="outline">Record</Button>} />
                 )}
               </li>
@@ -273,7 +276,10 @@ export function ClearancesPanel({ data, releaseRequestId }: { data: DemoData; re
   const done = clearances.filter((c) => c.status === "cleared" || c.status === "not_applicable").length;
 
   return (
-    <Panel title="Clearances" icon={ShieldCheck} aside={<span className="text-xs text-muted-foreground tabular">{done}/{clearances.length} recorded</span>}>
+    <Panel title="Clearances, then NOC" icon={ShieldCheck} aside={<span className="text-xs text-muted-foreground tabular">{done}/{clearances.length} recorded</span>}>
+      <p className="border-b px-4 py-2 text-[11px] text-muted-foreground">
+        PGRC and Vigilance Cell clearances as applicable come first; the Approval Bureau NOC (FDR/RPGF) or sanction order (RTGS) is a separate record that follows them. All responses are SIMULATED.
+      </p>
       <ul className="divide-y">
         {clearances.map((c) => (
           <li key={c.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 py-2.5">
@@ -312,7 +318,7 @@ export function ClearancesPanel({ data, releaseRequestId }: { data: DemoData; re
 // Decision
 // ---------------------------------------------------------------------------------------------
 
-export function DecisionPanel({ caseItem, suggestedRef }: { caseItem: VerificationCase; suggestedRef: string }) {
+export function DecisionPanel({ caseItem, suggestedRef, basis }: { caseItem: VerificationCase; suggestedRef: string; basis: string }) {
   const canDecide = useCan("recordDecision", caseItem.institutionId);
   const d = caseItem.decision;
   return (
@@ -335,7 +341,7 @@ export function DecisionPanel({ caseItem, suggestedRef }: { caseItem: Verificati
               Every check is complete. <span className="font-medium text-foreground">This is not an approval</span> — only the Approver can record the decision, with a reason and an order/NOC reference.
             </p>
             {canDecide ? (
-              <DecisionDialog caseId={caseItem.id} caseRef={caseItem.ref} suggestedRef={suggestedRef} trigger={<Button className="w-full gap-2 sm:w-auto"><Gavel className="size-4" /> Record decision</Button>} />
+              <DecisionDialog caseId={caseItem.id} caseRef={caseItem.ref} suggestedRef={suggestedRef} basis={basis} trigger={<Button className="w-full gap-2 sm:w-auto"><Gavel className="size-4" /> Record decision</Button>} />
             ) : (
               <p className="text-xs text-muted-foreground">Waiting for the Approver.</p>
             )}

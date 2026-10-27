@@ -92,7 +92,7 @@ export default function InstitutionReleaseTimelinePage() {
           <CaseTimeline events={events} />
         </div>
         <div className="min-w-0 space-y-6 lg:col-span-5">
-          <DecisionPanel caseItem={c} suggestedRef="" />
+          <DecisionPanel caseItem={c} suggestedRef="" basis="" />
           <ClearancesPanel data={d} releaseRequestId={rr.id} />
           <ChecklistPanel data={d} caseItem={c} />
         </div>

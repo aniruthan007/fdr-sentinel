@@ -15,6 +15,7 @@ import { CaseTimeline, ChecklistPanel, ClearancesPanel, DecisionPanel, Panel } f
 import { EvidenceViewer } from "@/components/official/evidence-viewer";
 import { Meta, RecordHeader, ReleaseStepper, suggestedDecisionRef } from "@/components/official/record-header";
 import { caseEntityIds } from "@/lib/evidence";
+import { StaleBanner, useOpenedBasis } from "@/components/replacement/replacement-impact";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { useCan, useCommand } from "@/hooks/use-command";
 import { useDemoStore } from "@/store/demo-store";
@@ -34,6 +35,7 @@ export default function ReleaseReviewPage() {
   const { run, busy } = useCommand();
   const canRequest = useCan("requestClearances", rr?.institutionId);
   const canAssign = useCan("assignCase", rr?.institutionId);
+  const { opened, changes, refresh } = useOpenedBasis(d, c?.id);
 
   const events = useMemo(() => {
     if (!c) return [];
@@ -95,6 +97,7 @@ export default function ReleaseReviewPage() {
       />
 
       <ReleaseStepper status={rr.status} />
+      {!c.decision && <StaleBanner changes={changes} onRefresh={refresh} institutionId={c.institutionId} />}
 
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="min-w-0 space-y-6 lg:col-span-7">
@@ -120,7 +123,7 @@ export default function ReleaseReviewPage() {
           <EvidenceViewer data={d} documents={documents} instruments={instruments} institutionId={rr.institutionId} activeField={activeField} onActiveFieldChange={setActiveField} />
         </div>
         <div className="min-w-0 space-y-6 lg:col-span-5">
-          <DecisionPanel caseItem={c} suggestedRef={suggestedDecisionRef("REL", rr.ref)} />
+          <DecisionPanel caseItem={c} suggestedRef={suggestedDecisionRef("REL", rr.ref)} basis={opened} />
           <ClearancesPanel data={d} releaseRequestId={rr.id} />
           <ChecklistPanel data={d} caseItem={c} />
           <CaseTimeline events={events} />

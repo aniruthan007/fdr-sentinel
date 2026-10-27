@@ -27,10 +27,12 @@ interface FormDialogProps {
   canSubmit?: boolean;
   destructive?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Wider, scrollable dialog for forms that carry a live explanation (e.g. replacement impact). */
+  wide?: boolean;
   children: React.ReactNode;
 }
 
-export function FormDialog({ trigger, title, description, submitLabel, successMessage, onSubmit, canSubmit = true, destructive, onOpenChange, children }: FormDialogProps) {
+export function FormDialog({ trigger, title, description, submitLabel, successMessage, onSubmit, canSubmit = true, destructive, onOpenChange, wide, children }: FormDialogProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function FormDialog({ trigger, title, description, submitLabel, successMe
   return (
     <Dialog open={open} onOpenChange={change}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={cn(wide ? "max-h-[92dvh] overflow-y-auto sm:max-w-2xl" : "sm:max-w-lg")}>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>

@@ -57,6 +57,8 @@ function receiptFor(inst: FinancialInstrument, ctx: SeedContext, i: number): Doc
     status: reviewedStatus.has(inst.status) ? "confirmed" : "extracted",
     uploadedBy: inst.institutionId === "inst-kit" ? "u-owner" : `ext-${inst.institutionId}`,
     uploadedAt: inst.submittedAt,
+    version: 1,
+    supersedesDocumentId: null,
   };
 }
 
@@ -76,6 +78,7 @@ const SUPPORTING: ExtraDoc[] = [
   ["doc-ysm-aff6", "inst-ysm", "fdr-ysm-01", "vc-06", "affidavit", "YSM-Affidavit-6-release.pdf", 2, -70],
   ["doc-ysm-loa", "inst-ysm", null, "vc-06", "letter_of_approval", "YSM-EoA-2025-26.pdf", 3, -70],
   ["doc-kit-bank", "inst-kit", "fdr-kit-03", "vc-07", "bank_confirmation", "DMB-Lien-Confirmation-341177.pdf", 1, -364],
+  ["doc-kit-07-bank", "inst-kit", "fdr-kit-07", null, "bank_confirmation", "SUB-Confirmation-0123456.pdf", 1, -350],
 ];
 
 export function buildDocuments(ctx: SeedContext, instruments: FinancialInstrument[]): DocumentRecord[] {
@@ -101,6 +104,8 @@ export function buildDocuments(ctx: SeedContext, instruments: FinancialInstrumen
       status: "confirmed",
       uploadedBy: institutionId === "inst-kit" ? "u-owner" : `ext-${institutionId}`,
       uploadedAt: ctx.t(offset, 16, 10),
+      version: 1,
+      supersedesDocumentId: null,
     }),
   );
   return [...receipts, ...supporting];
@@ -112,6 +117,7 @@ export function buildDocuments(ctx: SeedContext, instruments: FinancialInstrumen
  */
 const EXTRACTED: Record<string, { confidence: number[]; overrides?: Partial<Record<ExtractionField, (ctx: SeedContext) => string>> }> = {
   "fdr-kit-03": { confidence: [0.99, 0.98, 0.97, 0.99, 0.98, 0.97, 0.95] },
+  "fdr-kit-07": { confidence: [0.99, 0.97, 0.98, 0.99, 0.97, 0.98, 0.96] },
   "fdr-kit-05": {
     confidence: [0.98, 0.94, 0.96, 0.91, 0.97, 0.88, 0.93],
     overrides: { amount: () => "2000000.00", maturity_date: (ctx) => ctx.d(329) },

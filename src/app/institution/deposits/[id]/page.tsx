@@ -14,7 +14,9 @@ import { OBLIGATION_KIND_LABELS } from "@/components/tables/columns";
 import { CaseTimeline, DecisionPanel, Panel } from "@/components/official/case-panels";
 import { EvidenceViewer } from "@/components/official/evidence-viewer";
 import { Meta, RecordHeader } from "@/components/official/record-header";
-import { RenewDialog, RespondToCorrectionDialog } from "@/components/institution/institution-dialogs";
+import { AmendReplacementDialog, RenewDialog, RespondToCorrectionDialog } from "@/components/institution/institution-dialogs";
+import { ReplacementImpactPanel, ReviewsPanel } from "@/components/replacement/replacement-impact";
+import { replacementImpact } from "@/lib/replacement-impact";
 import { LineageChain } from "@/components/institution/lineage-chain";
 import { caseEntityIds } from "@/lib/evidence";
 import { correctionMessage, latestCaseFor, lineage, renewalInProgress } from "@/lib/institution";
@@ -36,6 +38,7 @@ export default function InstrumentPage() {
   const c = mine ? latestCaseFor(d, mine.id) : undefined;
   const canRenew = useCan("renewInstrument", mine?.institutionId);
   const canRespond = useCan("respondToCorrection", mine?.institutionId);
+  const canAmend = useCan("amendReplacement", mine?.institutionId);
 
   const events = useMemo(() => {
     if (!mine) return [];
@@ -59,6 +62,13 @@ export default function InstrumentPage() {
   const awaiting = c?.status === "awaiting_institution";
   const renewing = renewalInProgress(d, mine.id);
   const request = c ? correctionMessage(d, c.id) : null;
+  // Replacement pair: this instrument as a successor under review, or as the original of one.
+  const original = mine.predecessorInstrumentId ? d.instruments.find((i) => i.id === mine.predecessorInstrumentId) : undefined;
+  const successor = original ? mine : renewing;
+  const pairOriginal = original ?? (renewing ? mine : undefined);
+  const undecided = !!successor && ["submitted", "under_review", "needs_correction"].includes(successor.status);
+  const impact = successor && pairOriginal && undecided ? replacementImpact(d, pairOriginal.id, { id: successor.id }) : null;
+  const obligationLabel = obligation ? `${OBLIGATION_KIND_LABELS[obligation.kind]} deposit · AY ${obligation.academicYear}` : "—";
 
   return (
     <div className="space-y-6">
@@ -91,7 +101,10 @@ export default function InstrumentPage() {
               <RespondToCorrectionDialog caseId={c.id} caseRef={c.ref} instrumentNo={mine.instrumentNo} request={request} trigger={<Button size="sm" className="gap-1.5"><Send className="size-3.5" /> Respond to correction</Button>} />
             )}
             {mine.status === "active" && !renewing && canRenew && (
-              <RenewDialog instrument={mine} trigger={<Button size="sm" variant={status === "near_maturity" || status === "matured" ? "default" : "outline"} className="gap-1.5"><RefreshCcw className="size-3.5" /> Renew</Button>} />
+              <RenewDialog instrument={mine} trigger={<Button size="sm" variant={status === "near_maturity" || status === "matured" ? "default" : "outline"} className="gap-1.5"><RefreshCcw className="size-3.5" /> Renew / replace</Button>} />
+            )}
+            {original && undecided && canAmend && (
+              <AmendReplacementDialog successor={mine} trigger={<Button size="sm" variant="outline" className="gap-1.5">Amend replacement</Button>} />
             )}
           </>
         }
@@ -134,6 +147,12 @@ export default function InstrumentPage() {
 
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="min-w-0 space-y-6 lg:col-span-7">
+          {impact && <ReplacementImpactPanel impact={impact} obligationLabel={obligationLabel} />}
+          {successor && pairOriginal ? (
+            <ReviewsPanel data={d} original={pairOriginal} successor={successor} institutionId={mine.institutionId} />
+          ) : (
+            d.reviews.some((r) => r.instrumentId === mine.id) && <ReviewsPanel data={d} original={null} successor={mine} institutionId={mine.institutionId} />
+          )}
           <EvidenceViewer data={d} documents={documents} instruments={[mine]} institutionId={mine.institutionId} activeField={activeField} onActiveFieldChange={setActiveField} />
         </div>
         <div className="min-w-0 space-y-6 lg:col-span-5">
@@ -157,7 +176,7 @@ export default function InstrumentPage() {
             )}
             <p className="border-t px-4 py-2 text-[11px] text-muted-foreground">Findings are review items raised by an officer. They are not allegations.</p>
           </Panel>
-          {c && <DecisionPanel caseItem={c} suggestedRef="" />}
+          {c && <DecisionPanel caseItem={c} suggestedRef="" basis="" />}
           <CaseTimeline events={events} />
         </div>
       </div>

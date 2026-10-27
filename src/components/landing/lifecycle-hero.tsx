@@ -27,9 +27,9 @@ const STEPS: Step[] = [
   { label: "Corrected", status: "under_review", badge: "Corrected · under review", actor: "Institution", action: "correction.submitted", summary: "Corrected receipt uploaded" },
   { label: "Verified", status: "active", badge: "Verified · Active", actor: "Approver", action: "instrument.verified", summary: "Decision recorded with reference" },
   { label: "Near maturity", status: "near_maturity", badge: "Near maturity", actor: "System", action: "maturity.reminder", summary: "Matures in 18 days — reminder sent" },
-  { label: "Renewed", status: "active", badge: "Renewed · lineage linked", actor: "Institution", action: "instrument.renewed", summary: "Successor FDR linked to predecessor" },
+  { label: "Replacement", status: "active", badge: "Replacement accepted · linked", actor: "Approver", action: "instrument.renewed", summary: "Impact checked; successor's own evidence confirmed" },
   { label: "Release requested", status: "release_requested", badge: "Release requested", actor: "Institution", action: "release.submitted", summary: "Clause 6.46 checklist attached" },
-  { label: "Clearances", status: "awaiting_clearances", badge: "Clearances 4 / 4", actor: "Clearance officer", action: "clearance.recorded", summary: "PGRC, Vigilance, Finance, AB NOC" },
+  { label: "Clearances", status: "awaiting_clearances", badge: "Clearances, then NOC", actor: "Clearance officer", action: "clearance.recorded", summary: "PGRC, Vigilance Cell, then AB NOC (simulated)" },
   { label: "Decision", status: "approved", badge: "Decision recorded", actor: "Approver", action: "decision.recorded", summary: "Approved · ref DC/REL/2026/0027" },
 ];
 
@@ -61,6 +61,9 @@ export function LifecycleHero({ restartSignal = 0 }: { restartSignal?: number })
   const [focused, setFocused] = useState(false);
   const [manualPause, setManualPause] = useState(false);
   const [chain, setChain] = useState<AuditEvent[]>([]);
+  // The reduced-motion preference is unknown on the server, so text that depends on it waits for mount (no hydration mismatch).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Real SHA-256 chain via Web Crypto — the same code the demo store uses.
   useEffect(() => {
@@ -250,7 +253,7 @@ export function LifecycleHero({ restartSignal = 0 }: { restartSignal?: number })
         </div>
       </div>
       <p className="mt-3 text-center text-xs text-muted-foreground sm:text-left">
-        Each step stamps an event whose hash covers the one before it. {reduce ? "Use the steps to move through the lifecycle." : "Hover, or tap a step, to pause."}
+        Each step stamps an event whose hash covers the one before it. {mounted && reduce ? "Use the steps to move through the lifecycle." : "Hover, or tap a step, to pause."}
       </p>
     </div>
   );
@@ -337,7 +340,7 @@ function StepDetail({ step }: { step: number }) {
     case 8:
       return (
         <div className="grid grid-cols-2 gap-1.5 text-xs">
-          {["PGRC", "Vigilance Cell", "Finance", "Approval Bureau NOC"].map((c) => (
+          {["PGRC", "Vigilance Cell", "Approval Bureau NOC (after clearances)"].map((c) => (
             <span key={c} className="flex items-center gap-1.5">
               <Check className="size-3.5 text-status-success" aria-hidden />
               <span className="truncate">{c}</span>

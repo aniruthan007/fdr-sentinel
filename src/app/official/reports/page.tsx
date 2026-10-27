@@ -40,7 +40,7 @@ export default function ReportsPage() {
       status: STATUS_META[instrumentDisplayStatus(i, today)].label,
       predecessor: d.instruments.find((p) => p.id === i.predecessorInstrumentId)?.instrumentNo ?? "",
     }));
-    downloadCsv(`fdr-sentinel-instruments-${todayIST()}.csv`, toCsv(rows));
+    downloadCsv(`deposit-docket-instruments-${todayIST()}.csv`, toCsv(rows));
   }
 
   function exportReleases() {
@@ -58,7 +58,7 @@ export default function ReportsPage() {
         clearances_recorded: `${d.clearances.filter((x) => x.releaseRequestId === r.id && ["cleared", "not_applicable"].includes(x.status)).length}/${d.clearances.filter((x) => x.releaseRequestId === r.id).length}`,
       };
     });
-    downloadCsv(`fdr-sentinel-release-requests-${todayIST()}.csv`, toCsv(rows));
+    downloadCsv(`deposit-docket-release-requests-${todayIST()}.csv`, toCsv(rows));
   }
 
   return (
