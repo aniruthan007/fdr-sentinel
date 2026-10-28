@@ -249,7 +249,7 @@ export function AmendReplacementDialog({ successor, trigger }: Trigger & { succe
     setIssue(dates.issueDate);
     setMaturity(dates.maturityDate);
     setFile({ kind: "fdr_receipt", fileName: `${slug(successor.instrumentNo)}-receipt-revised.pdf`, sizeBytes: 171_000 });
-    setNote("Bank reissued the deposit for ₹25,00,000 dated on the original's maturity date.");
+    setNote("Bank reissued the deposit for ₹25,00,000, dated the day after the original matures.");
   }
 
   return (
@@ -273,7 +273,7 @@ export function AmendReplacementDialog({ successor, trigger }: Trigger & { succe
     >
       {isScenario && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-          <span>Judge scenario: the permitted resolution — ₹25 lakh deposited on the original&apos;s maturity date.</span>
+          <span>Judge scenario: the permitted resolution — ₹25 lakh deposited the day after the original matures.</span>
           <Button type="button" size="xs" variant="outline" onClick={fillScenario}>Fill resolution values</Button>
         </div>
       )}

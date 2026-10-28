@@ -38,8 +38,8 @@ synthetic records with explicitly defined requirements:
    shortfall of ₹5,00,000 and an apparent 14-day gap, and says the original's confirmation does not carry over.
 2. **Processing Officer → Verification cases → Replacement of SUB/TD/2025/0123456.** The case shows the
    *Replacement impact* panel and the successor's pending reviews. *Mark ready for decision* is refused.
-3. **Institution Owner → Amend replacement → Fill resolution values.** ₹25 lakh, deposited on the original's
-   maturity date, with a new receipt (v2). v1 is kept, and the affected reviews reopen. Press **Confirm all 7**.
+3. **Institution Owner → Amend replacement → Fill resolution values.** ₹25 lakh, deposited the day after the
+   original matures (the handover date), with a new receipt (v2). v1 is kept, and the affected reviews reopen. Press **Confirm all 7**.
 4. **Processing Officer → Request bank confirmation (simulated)** → record RE-01 → **Mark ready for decision**.
 5. **Approver → Record decision.** Only now is the original marked *Replaced*, with the effective date on the
    link. The original's confirmation history stays with the original.
@@ -85,8 +85,11 @@ Press **⌘K / Ctrl+K** in a portal to jump to any page or record your role can 
   holds, evidence versions, reviews, clearances, findings). `recordDecision` recomputes the basis and rejects a
   decision made on an out-of-date view. Approval also re-checks clearances, holds and replacement impact inside
   the command.
-- **Acceptance, not submission, replaces.** The predecessor becomes *Replaced* only when the Approver accepts
-  the successor. The link records `effectiveFrom` and the deciding case.
+- **Acceptance, not submission, replaces, and acceptance is not cover.** The predecessor becomes *Replaced* only
+  when the Approver accepts the successor. The link records `effectiveFrom` (the successor's deposit date) and the
+  deciding case. Cover is date-based (`src/lib/coverage.ts`): the original stays in force until the day before the
+  effective date, and the successor covers from it, with no double counting and no gap. The UI shows *Replaced · in
+  force until …* and *Accepted · cover starts …*, and totals read "cover in force today".
 - **Corrected policy content.**
   - Annexure-1/2 are no longer used as generic FDR checklists; the replacement checklists are labelled demo configuration.
   - There is no universal Finance clearance, and the clearance list is not a closed two-item list: PGRC, Vigilance Cell and *other applicable cells/bureaus* are recorded as applicable (each may be Not applicable, with a reason).

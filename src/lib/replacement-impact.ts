@@ -1,6 +1,7 @@
 import type { DemoData } from "@/data/seed";
 import { addDays, daysBetween, formatDate } from "@/lib/dates";
 import { formatINR } from "@/lib/money";
+import { coverPeriod, inForceOn } from "@/lib/coverage";
 import { currentDocument, currentReview } from "@/lib/reviews";
 import type { FinancialInstrument, ISODate, Paise } from "@/types";
 
@@ -142,9 +143,10 @@ export function replacementImpact(
 
   // --- Other coverage (A4) ----------------------------------------------------------------
   const siblings = d.instruments.filter((i) => i.obligationId === original.obligationId && i.id !== original.id && i.id !== succ.id);
-  const acceptedSiblings = siblings.filter((i) => i.status === "active");
-  // Each supporting instrument counts only on days it actually covers.
-  const acceptedOn = (day: ISODate | null) => (day ? acceptedSiblings.filter((i) => covers(i, day)) : []);
+  // Accepted cover = Active instruments, plus Replaced ones up to the day before their replacement's effective date.
+  const acceptedSiblings = siblings.filter((i) => coverPeriod(d, i) !== null);
+  // Each supporting instrument counts only on days it is actually in force.
+  const acceptedOn = (day: ISODate | null) => (day ? acceptedSiblings.filter((i) => inForceOn(d, i, day)) : []);
   const otherAccepted = acceptedOn(evalDay).map(toImpact);
   const otherAcceptedPaise = otherAccepted.reduce((s, i) => s + i.amountPaise, 0);
   const pendingNotCounted = siblings.filter((i) => PENDING.has(i.status)).map(toImpact);
@@ -230,7 +232,7 @@ export function replacementImpact(
       gapFrom = handoverDate!;
       gapTo = addDays(succ.issueDate!, -1);
       // Only instruments in force on EVERY gap day count (coverage periods are contiguous, so both ends suffice).
-      const gapCoverPaise = acceptedSiblings.filter((i) => covers(i, gapFrom!) && covers(i, gapTo!)).reduce((s, i) => s + i.amountPaise, 0);
+      const gapCoverPaise = acceptedSiblings.filter((i) => inForceOn(d, i, gapFrom!) && inForceOn(d, i, gapTo!)).reduce((s, i) => s + i.amountPaise, 0);
       const gapCovered = required !== null && gapCoverPaise >= required;
       findings.push(
         gapCovered
@@ -260,13 +262,14 @@ export function replacementImpact(
     }
   }
   // A7: later maturities of supporting instruments are outside this check's scope — noted, not assessed.
-  for (const i of otherAccepted) {
-    if (i.maturityDate && (!succ.maturityDate || i.maturityDate < succ.maturityDate)) {
+  for (const i of acceptedOn(evalDay)) {
+    const end = coverPeriod(d, i)?.to ?? null;
+    if (end && (!succ.maturityDate || end < succ.maturityDate)) {
       findings.push({
         code: "support_matures_during_term",
         level: "info",
         title: `${i.instrumentNo} matures during the successor's term`,
-        reason: `It is counted${onDay} only. It matures on ${formatDate(i.maturityDate)}; from the next day the obligation's coverage depends on that instrument's own replacement, which this check does not assess (demo assumption A7).`,
+        reason: `It is counted${onDay} only. Its cover ends on ${formatDate(end)}; from the next day the obligation's coverage depends on that instrument's own replacement, which this check does not assess (demo assumption A7).`,
         nextAction: null,
       });
     }

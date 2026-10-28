@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { verifyChain } from "@/lib/audit-chain";
-import { todayIST, addDays } from "@/lib/dates";
+import { todayIST, addDays, formatDate } from "@/lib/dates";
+import { coverOn, coverStanding, inForceOn } from "@/lib/coverage";
 import { INSUFFICIENT_LABEL, replacementImpact } from "@/lib/replacement-impact";
 import { currentDocument, currentReview, decisionBasis, encodeBasis } from "@/lib/reviews";
 import { rupees } from "@/lib/money";
@@ -235,7 +236,11 @@ describe("judge scenario — original → draft → impact → pending review �
     expect(inst(id).status).toBe("active");
     expect(inst(JUDGE_SCENARIO.originalId).status).toBe("replaced");
     const rn = data().renewals.find((x) => x.successorInstrumentId === id)!;
-    expect(rn).toMatchObject({ predecessorInstrumentId: JUDGE_SCENARIO.originalId, effectiveFrom: original.maturityDate, caseId: c.id });
+    expect(rn).toMatchObject({ predecessorInstrumentId: JUDGE_SCENARIO.originalId, effectiveFrom: addDays(original.maturityDate!, 1), caseId: c.id });
+    // The original keeps its full cover through its own maturity date; the successor takes over the next day.
+    expect(inForceOn(data(), inst(JUDGE_SCENARIO.originalId), original.maturityDate!)).toBe(true);
+    expect(inForceOn(data(), inst(id), original.maturityDate!)).toBe(false);
+    expect(inForceOn(data(), inst(id), addDays(original.maturityDate!, 1))).toBe(true);
     expect(data().obligations.find((o) => o.id === JUDGE_SCENARIO.obligationId)!.status).toBe("secured");
     // The original's own confirmation history survives acceptance.
     expect(currentReview(data(), JUDGE_SCENARIO.originalId, "bank_confirmation")!.reference).toBe("SIM-SUB/CNF/2025/0451");
@@ -486,5 +491,77 @@ describe("Clause 6.46 distinctions — clearances as applicable, then NOC (FDR/R
     expect(rules.get("RELEASE_DEFAULT_APPLICABILITY")!.provenance).toBe("demo_config");
     expect(rules.get("RELEASE_CLEARANCES")!.provenance).toBe("brief");
     expect(rules.get("RELEASE_FINAL_AUTHORITY")!.title).toMatch(/NOC for FDR\/RPGF.*Council sanction order for RTGS/);
+  });
+});
+
+describe("approval before a future handover — acceptance status vs cover in force", () => {
+  /** Full permitted path: ₹25 L successor deposited ON the handover date (original maturity + 1), approved today. */
+  async function approveFutureReplacement(): Promise<{ id: string; M: string; H: string }> {
+    store().enterAs("u-owner");
+    const original = inst(JUDGE_SCENARIO.originalId);
+    const M = original.maturityDate!;
+    const H = addDays(M, 1);
+    const r = await store().renewInstrument({ predecessorId: original.id, instrumentNo: "SUB/TD/2026/0199001", amountPaise: rupees(25_00_000), issueDate: H, maturityDate: addDays(H, 365), receipt: RECEIPT });
+    expect(r.ok).toBe(true);
+    const id = r.ok ? r.id! : "";
+    await confirmAllFields(id);
+    store().enterAs("u-po");
+    expect((await store().requestBankConfirmation({ instrumentId: id })).ok).toBe(true);
+    const c = caseFor(id);
+    for (const item of data().checklistItems.filter((i) => i.caseId === c.id && i.status === "pending")) {
+      expect((await store().recordChecklistOutcome({ itemId: item.id, outcome: "satisfied", evidenceDocumentId: currentDocument(data(), id)!.id })).ok).toBe(true);
+    }
+    expect((await store().markReadyForDecision({ caseId: c.id, recommendation: "No gap, no shortfall." })).ok).toBe(true);
+    store().enterAs("u-ap");
+    expect((await store().recordDecision({ caseId: c.id, decision: "approved", reason: "Accepted.", referenceNo: "DC/REN/2026/0101", basis: basisOf(c.id) })).ok).toBe(true);
+    return { id, M, H };
+  }
+
+  it("records acceptance now and the effective date separately", async () => {
+    const today = todayIST();
+    const { id, M, H } = await approveFutureReplacement();
+    expect(H > today).toBe(true); // approval happens before the handover
+    // Acceptance status changes immediately…
+    expect(inst(JUDGE_SCENARIO.originalId).status).toBe("replaced");
+    expect(inst(id).status).toBe("active");
+    // …but the recorded effective date is the successor's deposit (handover) date.
+    const rn = data().renewals.find((r) => r.successorInstrumentId === id)!;
+    expect(rn.effectiveFrom).toBe(H);
+    expect(rn.renewedAt.slice(0, 10) <= today).toBe(true);
+    // Cover standing distinguishes the two.
+    expect(coverStanding(data(), inst(JUDGE_SCENARIO.originalId), today)).toMatchObject({ state: "in_force", label: `In force until ${formatDate(M)}` });
+    expect(coverStanding(data(), inst(id), today)).toMatchObject({ state: "not_started", label: `Cover starts ${formatDate(H)}` });
+  });
+
+  it("the original covers through the day before the effective date and the successor from it — no double count, no gap", async () => {
+    const today = todayIST();
+    const { id, M, H } = await approveFutureReplacement();
+    const required = rupees(25_00_000);
+    for (let day = today; day <= addDays(H, 3); day = addDays(day, 1)) {
+      const cover = coverOn(data(), JUDGE_SCENARIO.obligationId, day);
+      expect(cover.paise, day).toBe(required); // never ₹50 L (double count), never ₹0 (artificial gap)
+      expect(cover.instruments.map((i) => i.id), day).toEqual(day <= M ? [JUDGE_SCENARIO.originalId] : [id]);
+    }
+    expect(inForceOn(data(), inst(JUDGE_SCENARIO.originalId), M)).toBe(true);
+    expect(inForceOn(data(), inst(JUDGE_SCENARIO.originalId), H)).toBe(false);
+    expect(inForceOn(data(), inst(id), M)).toBe(false);
+    expect(inForceOn(data(), inst(id), H)).toBe(true);
+    expect(data().obligations.find((o) => o.id === JUDGE_SCENARIO.obligationId)!.status).toBe("secured");
+  });
+
+  it("another instrument's replacement checked before the handover still counts the replaced original that is in force", async () => {
+    await approveFutureReplacement();
+    const original = inst(JUDGE_SCENARIO.originalId);
+    // A second ₹5 L instrument on the same obligation, maturing five days before the original.
+    const other = { ...original, id: "test-other", instrumentNo: "TEST/OTHER", amountPaise: rupees(5_00_000), status: "active" as const, predecessorInstrumentId: null, maturityDate: addDays(original.maturityDate!, -5) };
+    useDemoStore.setState({ data: { ...data(), instruments: [...data().instruments, other] } });
+    const handover = addDays(other.maturityDate, 1);
+    const impact = replacementImpact(data(), other.id, {
+      draft: { instrumentNo: "TEST/OTHER-2", bankName: other.bankName, amountPaise: rupees(5_00_000), issueDate: handover, maturityDate: addDays(handover, 365) },
+      draftHasReceipt: true,
+    });
+    // On that day the replaced original (₹25 L) is still in force; its accepted successor is not yet.
+    expect(impact.otherAccepted.map((i) => i.id)).toEqual([JUDGE_SCENARIO.originalId]);
+    expect(impact.shortfallPaise).toBe(0);
   });
 });

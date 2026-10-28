@@ -38,6 +38,16 @@
 - `pnpm test` 57/57 (9 more: date-coverage regressions incl. readiness/decision path; other cells; NOC vs
   Council sanction; provenance).
 
+**Acceptance vs cover in force (third commit)**
+- Totals and obligation status were derived from status alone. Between approval and a future effective date, the
+  accepted successor counted before it was in force and the replaced original was ignored while still in force.
+  Replacement-impact for another instrument on the same obligation could then report an artificial shortfall.
+- Added `src/lib/coverage.ts` (date-based cover periods). Obligation status, "cover in force today" totals and
+  replacement impact now use it. Badges read *Replaced · in force until …* / *Accepted · cover starts …*, and the
+  recorded effective date is shown on both instruments, the lineage chain and the case.
+- Judge-scenario resolution now deposits on the handover date (day after the original matures).
+- `pnpm test` 60/60 (3 new: approval before a future handover).
+
 **Not done / limits**
 - Browser-only: no server, no shared database; controls are prototype controls, not server-side security.
 - Lighthouse not re-run after this change.

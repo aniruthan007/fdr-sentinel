@@ -102,7 +102,7 @@ export default function RenewalsPage() {
         <div className="space-y-4">
           {chains.map((chain) => (
             <div key={chain[0].id} className="rounded-xl border bg-card p-4 shadow-soft">
-              <LineageChain chain={chain} today={today} hrefFor={hrefFor} />
+              <LineageChain chain={chain} data={d} today={today} hrefFor={hrefFor} />
             </div>
           ))}
           {chains.length === 0 && <p className="text-sm text-muted-foreground">No renewals yet.</p>}

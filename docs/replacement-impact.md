@@ -74,3 +74,23 @@ Rejection remains possible on the current state.
 **Limit:** all of this runs in the browser command layer of a prototype. It is a correct, tested control
 model, not server-side security. In production the same checks belong in the API, under database
 transactions and Row-Level Security.
+
+## Acceptance vs cover in force
+
+Code: `src/lib/coverage.ts` · tests: "approval before a future handover" in `src/store/replacement.test.ts`.
+
+Accepting a replacement and the replacement taking effect are separate facts.
+
+| | Recorded when the Approver decides | Date-based (cover in force) |
+|---|---|---|
+| Original | Status **Replaced** | In force until the day before the replacement's **effective date** (or its own maturity, if earlier) |
+| Successor | Status **Active** (accepted) | In force from its deposit date = the recorded **effective date** (`RenewalReplacement.effectiveFrom`) |
+
+Example: approved 28 Oct 2026; successor deposited 10 Nov 2026; original matures 09 Nov 2026.
+
+- 28 Oct – 09 Nov: the original (Replaced) secures the obligation and the successor (Active) does not yet. The UI shows *Replaced · in force until 09 Nov 2026* and *Accepted · cover starts 10 Nov 2026*.
+- From 10 Nov: the successor alone secures it.
+
+The amount is never counted twice and there is no artificial gap. Obligation status and every "cover in force today" total use this date-based cover, not acceptance status. Replacement-impact checks for other instruments on the same obligation also count a replaced original on the days it is still in force.
+
+The recorded effective date is shown on both instruments' pages, in the lineage chain and on the renewal case.

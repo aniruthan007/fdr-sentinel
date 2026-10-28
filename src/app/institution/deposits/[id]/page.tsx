@@ -17,6 +17,7 @@ import { Meta, RecordHeader } from "@/components/official/record-header";
 import { AmendReplacementDialog, RenewDialog, RespondToCorrectionDialog } from "@/components/institution/institution-dialogs";
 import { ReplacementImpactPanel, ReviewsPanel } from "@/components/replacement/replacement-impact";
 import { replacementImpact } from "@/lib/replacement-impact";
+import { acceptanceBadgeLabel, acceptanceOf, coverStanding, replacementOf } from "@/lib/coverage";
 import { LineageChain } from "@/components/institution/lineage-chain";
 import { caseEntityIds } from "@/lib/evidence";
 import { correctionMessage, latestCaseFor, lineage, renewalInProgress } from "@/lib/institution";
@@ -62,6 +63,10 @@ export default function InstrumentPage() {
   const awaiting = c?.status === "awaiting_institution";
   const renewing = renewalInProgress(d, mine.id);
   const request = c ? correctionMessage(d, c.id) : null;
+  // Acceptance (recorded decision) and cover in force today are shown separately.
+  const standing = coverStanding(d, mine, today);
+  const acceptedAs = acceptanceOf(d, mine.id);
+  const replacedBy = replacementOf(d, mine.id);
   // Replacement pair: this instrument as a successor under review, or as the original of one.
   const original = mine.predecessorInstrumentId ? d.instruments.find((i) => i.id === mine.predecessorInstrumentId) : undefined;
   const successor = original ? mine : renewing;
@@ -91,7 +96,7 @@ export default function InstrumentPage() {
         title={mine.instrumentNo}
         badges={
           <>
-            <StatusBadge status={status} />
+            <StatusBadge status={status} label={acceptanceBadgeLabel(d, mine, today)} />
             {c && <span className="text-xs text-muted-foreground">Case {c.ref} · <StatusBadge status={c.status} className="h-5 text-[11px]" /></span>}
           </>
         }
@@ -117,6 +122,23 @@ export default function InstrumentPage() {
             <Meta label="Branch">{mine.branch}</Meta>
             <Meta label="IFSC"><IdText value={mine.ifsc} /></Meta>
             <Meta label="Submitted"><DateText at={mine.submittedAt} /></Meta>
+            <Meta label="Cover today">
+              <span title={standing.detail ?? undefined} className={standing.state === "in_force" ? "text-status-success" : standing.state === "not_started" ? "text-status-warning" : undefined}>
+                {standing.label}
+              </span>
+            </Meta>
+            {acceptedAs && (
+              <>
+                <Meta label="Accepted as replacement"><DateText at={acceptedAs.renewedAt} /></Meta>
+                <Meta label="Effective from"><span className="font-medium"><DateText date={acceptedAs.effectiveFrom} /></span></Meta>
+              </>
+            )}
+            {replacedBy && (
+              <>
+                <Meta label="Replacement accepted"><DateText at={replacedBy.renewedAt} /></Meta>
+                <Meta label="Replacement effective"><span className="font-medium"><DateText date={replacedBy.effectiveFrom} /></span></Meta>
+              </>
+            )}
             <Meta label="Renewal">{renewing ? <Link className="font-mono text-[13px] text-primary hover:underline" href={`/institution/deposits/${renewing.id}`}>{renewing.instrumentNo}</Link> : "—"}</Meta>
           </>
         }
@@ -140,7 +162,7 @@ export default function InstrumentPage() {
       {chain.length > 1 && (
         <Panel title="Renewal lineage" icon={GitBranch} aside={<span className="text-xs text-muted-foreground">{chain.length} generations · history kept</span>}>
           <div className="p-4">
-            <LineageChain chain={chain} currentId={mine.id} today={today} hrefFor={(i) => `/institution/deposits/${i.id}`} />
+            <LineageChain chain={chain} data={d} currentId={mine.id} today={today} hrefFor={(i) => `/institution/deposits/${i.id}`} />
           </div>
         </Panel>
       )}

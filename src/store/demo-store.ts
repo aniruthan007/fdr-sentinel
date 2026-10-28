@@ -22,6 +22,7 @@ import { DEMO_USERS } from "@/data/people";
 import { buildSeed, type DemoData } from "@/data/seed";
 import { CLEARANCE_DEPARTMENT_LABELS, clearanceDepartmentsFor, FINAL_AUTHORITIES, isFinalAuthority, PRE_NOC_CLEARANCES } from "@/data/releases";
 import { blockingFindings, replacementImpact } from "@/lib/replacement-impact";
+import { coverOn } from "@/lib/coverage";
 import {
   basisChanges,
   currentDocument,
@@ -259,13 +260,14 @@ function verifyInstrument(d: DemoData, inst: FinancialInstrument, actorId: strin
   moveInstrument(d, inst, "active", "activate", actorId, now);
 }
 
-/** Re-derives an obligation's status from the Active instruments that secure it. */
+/**
+ * Re-derives an obligation's status from the cover IN FORCE today (src/lib/coverage.ts): an accepted successor whose
+ * deposit date is still ahead does not count yet, and the replaced instrument it succeeds still does until then.
+ */
 function refreshObligation(d: DemoData, obligationId: string) {
   const ob = d.obligations.find((o) => o.id === obligationId);
   if (!ob || ob.status === "release_in_progress" || ob.status === "discharged") return;
-  const covered = d.instruments
-    .filter((i) => i.obligationId === obligationId && i.status === "active")
-    .reduce((sum, i) => sum + i.amountPaise, 0);
+  const covered = coverOn(d, obligationId, todayIST()).paise;
   const target = covered >= ob.requiredPaise ? "secured" : covered > 0 ? "partially_secured" : "pending";
   if (target !== ob.status && canTransition(obligationMachine, ob.status, target)) ob.status = target;
 }

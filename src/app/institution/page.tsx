@@ -14,6 +14,7 @@ import { daysBetween, formatRelativeDays } from "@/lib/dates";
 import { correctionMessage, latestCaseFor, renewalInProgress } from "@/lib/institution";
 import { isOpenRelease } from "@/lib/selectors";
 import { instrumentDisplayStatus, STATUS_META } from "@/lib/status";
+import { coverInForce } from "@/lib/coverage";
 import { useDemoData, useSession, useToday } from "@/store/hooks";
 
 interface Attention {
@@ -83,7 +84,8 @@ export default function InstitutionOverviewPage() {
   }, [d, instId, mine, active, openReleases, today]);
 
   const activity = d.audit.filter((e) => e.institutionId === instId).slice(-6).reverse();
-  const cover = active.reduce((s, i) => s + i.amountPaise, 0);
+  // Cover in force today, not acceptance status: see src/lib/coverage.ts.
+  const cover = coverInForce(d, today, instId);
   const maturing = active.filter((i) => ["near_maturity", "matured"].includes(instrumentDisplayStatus(i, today))).length;
 
   return (
@@ -93,7 +95,7 @@ export default function InstitutionOverviewPage() {
       } />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Active deposit cover" value={<MoneyText paise={cover} compact />} hint={`${active.length} active instruments`} icon={Landmark} href="/institution/deposits" />
+        <StatCard label="Deposit cover in force today" value={<MoneyText paise={cover} compact />} hint={`${active.length} accepted active instruments`} icon={Landmark} href="/institution/deposits" />
         <StatCard label="Needs your attention" value={attention.filter((a) => a.tone !== "info").length} hint="Corrections, flags and renewals" icon={AlertTriangle} tone={attention.some((a) => a.tone === "danger") ? "danger" : "default"} />
         <StatCard label="Maturing ≤ 30 days" value={maturing} hint="Renew before maturity" icon={CalendarClock} tone={maturing ? "warning" : "default"} href="/institution/renewals" />
         <StatCard label="Open release requests" value={openReleases.length} hint="Track clearances and decision" icon={Undo2} href="/institution/releases" />

@@ -9,6 +9,7 @@ import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
 import { ROLE_LABELS } from "@/lib/authz";
 import { instrumentDisplayStatus } from "@/lib/status";
+import { acceptanceBadgeLabel, coverInForce, coverOn } from "@/lib/coverage";
 import { DOCUMENT_KIND_LABELS } from "@/data/documents";
 import { CLEARANCE_DEPARTMENT_LABELS } from "@/data/releases";
 import { demoUser } from "@/data/people";
@@ -95,7 +96,7 @@ export function instrumentColumns(d: DemoData, today: ISODate, opts: { instituti
       accessorFn: (r) => instrumentDisplayStatus(r, today),
       cell: ({ row: { original: r } }) => (
         <div className="flex items-center gap-1.5">
-          <StatusBadge status={instrumentDisplayStatus(r, today)} />
+          <StatusBadge status={instrumentDisplayStatus(r, today)} label={acceptanceBadgeLabel(d, r, today)} />
           {r.predecessorInstrumentId && (
             <span title="Renewal of an earlier instrument" className="text-muted-foreground">
               <GitBranch className="size-3.5" aria-label="Has predecessor" />
@@ -108,7 +109,7 @@ export function instrumentColumns(d: DemoData, today: ISODate, opts: { instituti
   return cols;
 }
 
-export function obligationColumns(d: DemoData): ColumnDef<DepositObligation>[] {
+export function obligationColumns(d: DemoData, today: ISODate): ColumnDef<DepositObligation>[] {
   return [
     { id: "kind", header: "Obligation", accessorFn: (r) => OBLIGATION_KIND_LABELS[r.kind], cell: ({ row: { original: r } }) => (
       <div>
@@ -119,8 +120,8 @@ export function obligationColumns(d: DemoData): ColumnDef<DepositObligation>[] {
     { id: "required", header: "Required", accessorFn: (r) => r.requiredPaise, cell: ({ row }) => <MoneyText paise={row.original.requiredPaise} /> },
     {
       id: "covered",
-      header: "Active cover",
-      accessorFn: (r) => d.instruments.filter((i) => i.obligationId === r.id && i.status === "active").reduce((s, i) => s + i.amountPaise, 0),
+      header: "Cover in force today",
+      accessorFn: (r) => coverOn(d, r.id, today).paise,
       cell: ({ getValue }) => <MoneyText paise={getValue() as number} />,
     },
     { id: "instruments", header: "Instruments", accessorFn: (r) => d.instruments.filter((i) => i.obligationId === r.id && i.status !== "replaced").length, cell: ({ getValue }) => <span className="tabular">{getValue() as number}</span> },
@@ -226,7 +227,7 @@ export function documentColumns(d: DemoData): ColumnDef<DocumentRecord>[] {
   ];
 }
 
-export function institutionColumns(d: DemoData): ColumnDef<Institution>[] {
+export function institutionColumns(d: DemoData, today: ISODate): ColumnDef<Institution>[] {
   return [
     {
       id: "name",
@@ -243,7 +244,7 @@ export function institutionColumns(d: DemoData): ColumnDef<Institution>[] {
     },
     { id: "ref", header: "Reference", accessorFn: (r) => r.refCode, cell: ({ row }) => <IdText value={row.original.refCode} /> },
     { id: "required", header: "Required", accessorFn: (r) => d.obligations.filter((o) => o.institutionId === r.id && o.status !== "discharged").reduce((s, o) => s + o.requiredPaise, 0), cell: ({ getValue }) => <MoneyText paise={getValue() as number} compact /> },
-    { id: "covered", header: "Active cover", accessorFn: (r) => d.instruments.filter((i) => i.institutionId === r.id && i.status === "active").reduce((s, i) => s + i.amountPaise, 0), cell: ({ getValue }) => <MoneyText paise={getValue() as number} compact /> },
+    { id: "covered", header: "Cover in force today", accessorFn: (r) => coverInForce(d, today, r.id), cell: ({ getValue }) => <MoneyText paise={getValue() as number} compact /> },
     { id: "openCases", header: "Open cases", accessorFn: (r) => d.cases.filter((c) => c.institutionId === r.id && !["approved", "rejected", "closed"].includes(c.status)).length, cell: ({ getValue }) => <span className="tabular">{getValue() as number}</span> },
   ];
 }

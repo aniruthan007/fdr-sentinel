@@ -243,8 +243,8 @@ export function ReviewsPanel({ data, original, successor, institutionId }: { dat
   return (
     <Panel title="Reviews and confirmations" icon={ListChecks} aside={<span className="text-xs text-muted-foreground">per instrument · per evidence version</span>}>
       <div className="divide-y">
-        <InstrumentReviews data={data} inst={successor} role={original ? "Proposed successor" : "This instrument"} canRequestBank={canRequestBank} />
-        {original && <InstrumentReviews data={data} inst={original} role="Original — history preserved, not transferred" canRequestBank={false} />}
+        <InstrumentReviews data={data} inst={successor} role={!original ? "This instrument" : successor.status === "active" ? "Accepted successor" : "Proposed successor"} canRequestBank={canRequestBank} />
+        {original && <InstrumentReviews data={data} inst={original} role={original.status === "replaced" ? "Replaced original — history preserved, not transferred" : "Original — history preserved, not transferred"} canRequestBank={false} />}
       </div>
     </Panel>
   );

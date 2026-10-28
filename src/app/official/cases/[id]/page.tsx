@@ -17,6 +17,7 @@ import { EvidenceViewer } from "@/components/official/evidence-viewer";
 import { Meta, RecordHeader, suggestedDecisionRef } from "@/components/official/record-header";
 import { caseEntityIds } from "@/lib/evidence";
 import { replacementImpact } from "@/lib/replacement-impact";
+import { acceptanceBadgeLabel, coverStanding } from "@/lib/coverage";
 import { ReplacementImpactPanel, ReviewsPanel, StaleBanner, useOpenedBasis } from "@/components/replacement/replacement-impact";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { useCan, useCommand } from "@/hooks/use-command";
@@ -70,6 +71,7 @@ export default function CaseWorkbenchPage() {
     .sort((a, b) => (a.kind === "fdr_receipt" ? 0 : 1) - (b.kind === "fdr_receipt" ? 0 : 1) || b.version - a.version);
   const openFindings = d.findings.filter((f) => f.caseId === c.id && f.status === "open").length;
   const active = !["approved", "rejected", "closed"].includes(c.status);
+  const acceptedRenewal = d.renewals.find((r) => r.caseId === c.id);
   const predecessor = primary?.predecessorInstrumentId ? d.instruments.find((i) => i.id === primary.predecessorInstrumentId && c.instrumentIds.includes(i.id)) : undefined;
   const impact = predecessor && primary ? replacementImpact(d, predecessor.id, { id: primary.id }) : null;
   const obligationLabel = obligation ? `${OBLIGATION_KIND_LABELS[obligation.kind]} · ${d.institutions.find((i) => i.id === obligation.institutionId)?.shortName ?? ""} · AY ${obligation.academicYear}` : "—";
@@ -93,7 +95,7 @@ export default function CaseWorkbenchPage() {
         badges={
           <>
             <StatusBadge status={c.status} />
-            {primary && <StatusBadge status={instrumentDisplayStatus(primary, today)} label={`Instrument: ${instrumentDisplayStatus(primary, today).replace(/_/g, " ")}`} />}
+            {primary && <StatusBadge status={instrumentDisplayStatus(primary, today)} label={`Instrument: ${acceptanceBadgeLabel(d, primary, today) ?? instrumentDisplayStatus(primary, today).replace(/_/g, " ")}`} />}
           </>
         }
         actions={
@@ -128,6 +130,11 @@ export default function CaseWorkbenchPage() {
             <Meta label="Opened"><DateText at={c.openedAt} /></Meta>
             <Meta label="Due">{c.dueDate ? <DateText date={c.dueDate} relative /> : "—"}</Meta>
             <Meta label="Maturity">{primary ? <DateText date={primary.maturityDate} /> : "—"}</Meta>
+            {acceptedRenewal && (
+              <Meta label="Replacement effective">
+                <span className="font-medium"><DateText date={acceptedRenewal.effectiveFrom} /></span> · {coverStanding(d, primary!, today).label}
+              </Meta>
+            )}
             <Meta label="Lineage">
               {primary?.predecessorInstrumentId ? (
                 <span className="inline-flex items-center gap-1 font-mono text-[13px]">
