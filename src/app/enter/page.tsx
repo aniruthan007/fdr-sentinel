@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Building2, ClipboardCheck, Gavel, ScrollText, ShieldCheck, type LucideIcon } from "lucide-react";
 import { Brand } from "@/components/shell/brand";
+import { DemoGuide } from "@/components/demo/demo-guide";
 import { Skeleton } from "@/components/ui/skeleton";
 import { portalFor, ROLE_LABELS } from "@/lib/authz";
 import { flaggedInstrumentIds } from "@/lib/selectors";
@@ -82,6 +83,11 @@ export default function EnterPage() {
               No sign-up and no password. Each role opens a populated portal. You can switch roles at any time from the
               top bar, and reset the demo data whenever you like.
             </p>
+            <p className="text-sm">
+              <a href="#demo-guide-section" className="font-medium text-primary underline-offset-2 hover:underline">
+                Judges: follow the 4-minute demo guide ↓
+              </a>
+            </p>
           </div>
         </div>
 
@@ -130,9 +136,12 @@ export default function EnterPage() {
           })}
         </ul>
 
+        <DemoGuide />
+
         <p className="mt-8 text-xs text-muted-foreground">
           Everything you do is stored only in this browser and recorded in a SHA-256 hash-chained audit log. Institutions,
-          banks, people and FDR numbers are fictional.
+          banks, people and FDR numbers are fictional. Deposit Docket · Team MAVERICKS · Team ID SIH1277. Not endorsed by or
+          connected to AICTE or any bank.
         </p>
       </div>
     </main>

@@ -50,7 +50,7 @@ export const OFFICIAL_NAV: NavItem[] = [
   { href: "/official/instruments", label: "Instruments", icon: FileStack, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Every FDR, RPGF and RTGS instrument across institutions." },
   { href: "/official/institutions", label: "Institutions", icon: Building2, group: "Records", roles: ["processing_officer", "approver", "supervisor", "auditor"], phase: 4, summary: "Institutions, their obligations and deposit coverage." },
   { href: "/official/maturity", label: "Maturity radar", icon: CalendarClock, group: "Records", roles: ["processing_officer", "supervisor", "approver", "auditor"], phase: 4, summary: "Instruments maturing in the next 90 days." },
-  { href: "/official/audit", label: "Audit log", icon: ScrollText, group: "Oversight", roles: ["auditor"], phase: 4, summary: "Tamper-evident, hash-chained record of every action." },
+  { href: "/official/audit", label: "Audit log", icon: ScrollText, group: "Oversight", roles: ["auditor"], phase: 4, summary: "Hash-chained record of every action (tamper-evident in this browser demo)." },
   { href: "/official/reports", label: "Reports", icon: BarChart3, group: "Oversight", roles: ["auditor", "supervisor", "approver"], phase: 5, summary: "Coverage, maturity and turnaround reports with CSV export." },
   { href: "/official/policy", label: "Policy & checklists", icon: BookCheck, group: "Oversight", roles: ["policy_admin", "auditor"], phase: 5, summary: "Versioned, source-linked rules and checklists." },
   { href: "/official/notifications", label: "Notifications", icon: Bell, group: "Oversight", roles: ALL_OFFICIAL, phase: 5, summary: "Alerts routed to your role." },

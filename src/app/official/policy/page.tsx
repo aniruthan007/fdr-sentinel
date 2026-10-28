@@ -12,8 +12,8 @@ import { useDemoData } from "@/store/hooks";
 import type { ChecklistKind, ChecklistRequirement, PolicyRule, Provenance as ProvenanceValue } from "@/types";
 
 const CHECKLIST_LABELS: Record<ChecklistKind, string> = {
-  annexure_1: "Annexure-1 · Deposit verification",
-  annexure_2: "Annexure-2 · Renewal",
+  deposit_lodgement: "Deposit lodgement · demo configuration",
+  replacement_evidence: "Replacement evidence · demo configuration",
   clause_6_46: "Clause 6.46 · Release",
 };
 

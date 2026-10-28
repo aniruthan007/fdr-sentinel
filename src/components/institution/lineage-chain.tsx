@@ -7,10 +7,33 @@ import { DateText } from "@/components/date-text";
 import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
 import { instrumentDisplayStatus } from "@/lib/status";
+import { acceptanceBadgeLabel, acceptanceOf, coverPeriod } from "@/lib/coverage";
+import type { DemoData } from "@/data/seed";
 import type { FinancialInstrument, ISODate } from "@/types";
 
+/** Cover period actually in force, and the recorded effective date of the replacement that started it. */
+function CoverLine({ data, inst }: { data: Pick<DemoData, "renewals">; inst: FinancialInstrument }) {
+  const p = coverPeriod(data, inst);
+  const accepted = acceptanceOf(data, inst.id);
+  if (!p && !accepted) return null;
+  return (
+    <p className="mt-0.5 text-[11px] text-muted-foreground">
+      {p && (
+        <>
+          Cover <DateText date={p.from} /> – {p.to ? <DateText date={p.to} /> : "open"}
+        </>
+      )}
+      {accepted && (
+        <span className="block">
+          Effective <DateText date={accepted.effectiveFrom} />
+        </span>
+      )}
+    </p>
+  );
+}
+
 /** Generations of one deposit, oldest first. History is linked, never overwritten. */
-export function LineageChain({ chain, currentId, today, hrefFor }: { chain: FinancialInstrument[]; currentId?: string; today: ISODate; hrefFor?: (i: FinancialInstrument) => string }) {
+export function LineageChain({ chain, data, currentId, today, hrefFor }: { chain: FinancialInstrument[]; data: Pick<DemoData, "renewals">; currentId?: string; today: ISODate; hrefFor?: (i: FinancialInstrument) => string }) {
   return (
     <ol className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-0" aria-label="Renewal lineage">
       {chain.map((inst, i) => {
@@ -24,7 +47,7 @@ export function LineageChain({ chain, currentId, today, hrefFor }: { chain: Fina
           >
             <p className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
               Generation {i + 1}
-              <StatusBadge status={instrumentDisplayStatus(inst, today)} className="h-5 text-[10px]" noHint />
+              <StatusBadge status={instrumentDisplayStatus(inst, today)} label={acceptanceBadgeLabel(data, inst, today)} className="h-5 text-[10px]" noHint />
             </p>
             <p className="mt-1 truncate font-mono text-[13px]">{inst.instrumentNo}</p>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -33,6 +56,7 @@ export function LineageChain({ chain, currentId, today, hrefFor }: { chain: Fina
                 <DateText date={inst.issueDate} /> → <DateText date={inst.maturityDate} />
               </span>
             </p>
+            <CoverLine data={data} inst={inst} />
           </div>
         );
         return (

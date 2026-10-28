@@ -91,7 +91,8 @@ export function AuditExplorer({ events }: { events: AuditEvent[] }) {
         <p className="flex items-start gap-2 rounded-lg border border-dashed border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           <FlaskConical className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           Simulation: event #{tamperSeq}&apos;s summary was edited in a copy of the chain. The stored chain is never modified — audit
-          events are append-only.
+          events are append-only. This browser-held chain is tamper-evident only: someone who rewrites every later hash would not be
+          detected without an independent anchor.
         </p>
       )}
 

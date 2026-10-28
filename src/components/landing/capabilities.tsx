@@ -297,10 +297,10 @@ export function Capabilities() {
   const cards = [
     { title: "Evidence-linked extraction", body: "Every extracted field points to the exact region it came from, with its confidence.", node: <ExtractionFragment /> },
     { title: "Discrepancy detection", body: "Declared, extracted and on-record values side by side. Differences become review findings.", node: <DiscrepancyFragment /> },
-    { title: "Instrument lineage", body: "A renewal links to the FDR it replaces. Earlier generations are kept, never overwritten.", node: <LineageFragment /> },
+    { title: "Replacement impact & lineage", body: "A replacement links to the FDR it replaces. Apparent shortfalls and date gaps are explained, and the successor needs its own confirmation.", node: <LineageFragment /> },
     { title: "Maturity radar", body: "Ninety days of upcoming maturities at a glance, with reminders before each one.", node: <RadarFragment data={data} />, live: true },
     { title: "Clause 6.46 release workflow", body: "A separate release checklist with clearances recorded as their own records.", node: <ChecklistFragment data={data} />, live: true },
-    { title: "Tamper-evident audit chain", body: "Each event's SHA-256 hash covers the one before it, so any edit breaks the chain.", node: <ChainFragment data={data} />, live: true },
+    { title: "Hash-chained audit log", body: "Each event's SHA-256 hash covers the one before it, so an edit that does not recompute the chain is detected. Browser-held demo: tamper-evident, not tamper-proof.", node: <ChainFragment data={data} />, live: true },
   ];
 
   return (

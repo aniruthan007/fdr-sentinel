@@ -117,7 +117,7 @@ export interface Institution {
   contactEmail: string;
 }
 
-export type ObligationKind = "establishment" | "intake_increase" | "new_programme";
+export type ObligationKind = "establishment" | "intake_increase" | "new_programme" | "additional_course";
 
 export interface DepositObligation {
   id: string;
@@ -129,6 +129,11 @@ export interface DepositObligation {
   createdAt: ISOTimestamp;
   /** Where the required amount comes from. Demo values are configuration, not regulation. */
   sourceRef: string;
+  /**
+   * False when the required amount for this obligation has not been established. Replacement-impact
+   * checks then report "Insufficient information—review required" instead of a pass.
+   */
+  requirementKnown: boolean;
 }
 
 export type InstrumentType = "FDR" | "RPGF" | "RTGS";
@@ -153,6 +158,21 @@ export interface FinancialInstrument {
   submittedAt: ISOTimestamp;
   updatedAt: ISOTimestamp;
   version: number;
+  /** Earlier declarations of a not-yet-accepted instrument, oldest first. Amendments never overwrite history. */
+  declarationHistory?: DeclarationSnapshot[];
+}
+
+/** What the institution declared before an amendment. */
+export interface DeclarationSnapshot {
+  version: number;
+  instrumentNo: string;
+  amountPaise: Paise;
+  issueDate: ISODate;
+  maturityDate: ISODate | null;
+  receiptDocumentId: string | null;
+  replacedAt: ISOTimestamp;
+  replacedBy: string;
+  note: string;
 }
 
 export type DocumentKind =
@@ -174,6 +194,10 @@ export interface DocumentRecord {
   status: DocumentStatus;
   uploadedBy: string;
   uploadedAt: ISOTimestamp;
+  /** Evidence version for this kind of document on this instrument (1, 2, …). */
+  version: number;
+  /** The earlier version this upload replaces. The earlier version is kept, never deleted. */
+  supersedesDocumentId: string | null;
 }
 
 export type ExtractionField =
@@ -279,8 +303,14 @@ export interface ReleaseRequest {
   decidedAt: ISOTimestamp | null;
 }
 
-/** Clearance sources named in CLAUDE.md §6. */
-export type ClearanceDepartment = "pgrc" | "vigilance_cell" | "approval_bureau" | "finance";
+/**
+ * Clause 6.46 (per the project brief and the supplied handbook extracts): clearance outcomes from PGRC, the Vigilance
+ * Cell and OTHER relevant cells/bureaus, as applicable; then, as separate final records, the Approval Bureau NOC for
+ * FDR/RPGF or the Council sanction order for RTGS. `other_applicable` keeps the list open-ended: an official records
+ * which other cell applies (Cleared, with reference) or why none does (Not applicable, with reason).
+ * Finance is not listed as a universal requirement, so the demo does not model it.
+ */
+export type ClearanceDepartment = "pgrc" | "vigilance_cell" | "other_applicable" | "approval_bureau" | "council_sanction";
 
 export interface ClearanceRecord {
   id: string;
@@ -305,8 +335,48 @@ export interface RenewalReplacement {
   institutionId: string;
   predecessorInstrumentId: string;
   successorInstrumentId: string;
+  /** When the replacement was accepted by an authorised decision. */
   renewedAt: ISOTimestamp;
+  /** Date from which the successor stands in for the predecessor (its deposit date). */
+  effectiveFrom: ISODate;
+  /** Renewal case whose decision accepted the replacement. */
+  caseId: string | null;
   recordedBy: string;
+}
+
+// ---------------------------------------------------------------------------
+// Reviews and confirmations — bound to one instrument and one evidence version
+// ---------------------------------------------------------------------------
+
+/**
+ * Four different things that must never be confused:
+ *   field_confirmation — someone confirmed the extracted reading of a document (not its authenticity);
+ *   consistency_check  — deterministic comparison of declared values against the extracted values;
+ *   bank_confirmation  — an authorised bank source confirmed specified details (SIMULATED in this prototype);
+ *   the authorised decision itself lives on the case (`VerificationCase.decision`), not here.
+ */
+export type ReviewKind = "field_confirmation" | "consistency_check" | "bank_confirmation";
+export type ReviewStatus = "pending" | "complete" | "needs_attention";
+
+export interface ReviewRecord {
+  id: string;
+  instrumentId: string;
+  kind: ReviewKind;
+  status: ReviewStatus;
+  /** The evidence document (and version) this result concerns. Null = no evidence on file yet. */
+  evidenceDocumentId: string | null;
+  evidenceVersion: number | null;
+  source: "INSTITUTION" | "DETERMINISTIC" | "SIMULATED";
+  /** What the result says. */
+  summary: string;
+  /** Why it is pending or needs attention. */
+  reason: string | null;
+  reference: string | null;
+  recordedBy: string | null;
+  recordedAt: ISOTimestamp | null;
+  createdAt: ISOTimestamp;
+  /** Set when a newer record replaces this one. Records are never deleted. */
+  supersededById: string | null;
 }
 
 export interface PolicyRule {
@@ -328,7 +398,11 @@ export interface PolicyRule {
  */
 export type Provenance = "demo_config" | "brief" | "verified";
 
-export type ChecklistKind = "clause_6_46" | "annexure_1" | "annexure_2";
+/**
+ * `clause_6_46` follows the project brief. The other two are demo configuration — Annexure-1/2 of the handbook are
+ * approval-process document lists, not FDR checklists, so they are deliberately not used here.
+ */
+export type ChecklistKind = "clause_6_46" | "deposit_lodgement" | "replacement_evidence";
 
 export interface ChecklistRequirement {
   id: string;
@@ -383,6 +457,7 @@ export type EntityType =
   | "release_request"
   | "clearance"
   | "renewal"
+  | "review"
   | "system";
 
 export interface WorkflowEvent {

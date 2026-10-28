@@ -1,10 +1,10 @@
-# CLAUDE.md — FDR Sentinel (SIH 2026 · Team Mavericks)
+# CLAUDE.md — Deposit Docket (SIH 2026 · Team MAVERICKS · SIH1277)
 
 Claude Code reads this file automatically. Re-read it before every phase.
 
 ## 1. What we are building — ONE-DAY BUILD
 
-**FDR Sentinel** — a Security Deposit & FDR Management Portal prototype for AICTE-approved technical institutions. Smart India Hackathon 2026 submission by Team Mavericks ("Not following the pack.").
+**Deposit Docket** (formerly FDR Sentinel) — a Security Deposit & FDR Management Portal prototype for AICTE-approved technical institutions. Tagline: "Every replacement linked. Every decision backed by current evidence." Smart India Hackathon 2026 submission by Team MAVERICKS (Team ID SIH1277, "Not following the pack.").
 
 Full specification: `docs/brief.md`. This file cuts it down to what can be built and deployed **in one day** as a convincing, clickable demo on Vercel.
 
@@ -29,7 +29,7 @@ The Vercel URL goes into our SIH PPT. A judge opens it cold. In 10 seconds they 
 5. "Ready for authorised decision" is not approval. Only the Approver role can record a decision, with reason + reference number.
 6. Every action appends an audit event.
 7. Money: ₹ with Indian grouping (₹12,50,000). Dates in Asia/Kolkata, DD MMM YYYY.
-8. Persistent thin banner: **"PROTOTYPE · DEMO DATA — NOT CONNECTED TO AICTE OR ANY BANK"**. No AICTE logo, no national emblem, no government branding.
+8. Persistent thin banner: **"PROTOTYPE · SYNTHETIC DATA · NOT CONNECTED TO AICTE OR ANY BANK"**. No AICTE logo, no national emblem, no government branding.
 9. All data fictional.
 
 ## 4. Stack
@@ -59,7 +59,8 @@ Wow comes from craft and working depth. Reference feel: Linear, Stripe Dashboard
 - ~25 instruments: FDR/RPGF/RTGS, banks (SBI, Canara Bank, Indian Bank, etc.), amounts ₹5L–₹1.5Cr, maturity dates spread over the next 120 days from today.
 - Demo cases that must exist: clean case · missing-document case · amount/date mismatch case · release request pending clearances · 3-generation renewal lineage · released & closed case.
 - Documents with extracted fields: `{field, value, confidence, region:{x,y,w,h}}`.
-- Clearances: PGRC, Vigilance Cell, Approval Bureau, Finance — with statuses from brief §7.4.
+- Clearances: PGRC, Vigilance Cell and other applicable cells/bureaus (not a closed list; each may be Not applicable with a reason), then as separate records the Approval Bureau NOC (FDR/RPGF) or Council sanction order (RTGS) — with statuses from brief §7.4. No universal Finance clearance. Default applicability is demo configuration.
+- Replacements: see `docs/replacement-impact.md` (impact checks, evidence versions, affected reviews, stale-decision guard).
 - ~40 seeded audit events forming a valid hash chain.
 
 ## 7. Roles

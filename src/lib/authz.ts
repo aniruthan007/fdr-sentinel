@@ -37,6 +37,10 @@ const MATRIX: Record<Action, readonly Role[]> = {
   requestClearances: ["processing_officer"],
   // Brief §2.1: owners and operators both respond to queries.
   respondToCorrection: ["institution_owner", "institution_operator"],
+  // Amending a not-yet-accepted replacement is a submission, so only the owner may do it.
+  amendReplacement: ["institution_owner"],
+  // Requests the (SIMULATED) bank source; the bank, not the officer, confirms the details.
+  requestBankConfirmation: ["processing_officer"],
   resetDemo: [...INSTITUTION_ROLES, ...OFFICIAL_ROLES],
 };
 
@@ -47,6 +51,7 @@ const INSTITUTION_SCOPED: ReadonlySet<Action> = new Set<Action>([
   "uploadDocument",
   "confirmField",
   "renewInstrument",
+  "amendReplacement",
 ]);
 
 export interface AuthzContext {

@@ -20,7 +20,18 @@ import {
 } from "@/lib/workflows";
 import { DEMO_USERS } from "@/data/people";
 import { buildSeed, type DemoData } from "@/data/seed";
-import { CLEARANCE_DEPARTMENTS, CLEARANCE_DEPARTMENT_LABELS } from "@/data/releases";
+import { CLEARANCE_DEPARTMENT_LABELS, clearanceDepartmentsFor, FINAL_AUTHORITIES, isFinalAuthority, PRE_NOC_CLEARANCES } from "@/data/releases";
+import { blockingFindings, replacementImpact } from "@/lib/replacement-impact";
+import { coverOn } from "@/lib/coverage";
+import {
+  basisChanges,
+  currentDocument,
+  currentReview,
+  decisionBasis,
+  isCurrentAndComplete,
+  REVIEW_KIND_LABELS,
+  REVIEW_KINDS,
+} from "@/lib/reviews";
 import { DOCUMENT_KIND_LABELS, RECEIPT_LAYOUT } from "@/data/documents";
 import type {
   Action,
@@ -41,9 +52,13 @@ import type {
   ISOTimestamp,
   Paise,
   ReleaseStatus,
+  ReviewRecord,
   Session,
   VerificationCase,
 } from "@/types";
+
+/** localStorage key for the demo records and the current role (this browser only). */
+export const DEMO_STORAGE_KEY = "deposit-docket-demo";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -113,6 +128,11 @@ export interface RecordDecisionInput {
   reason: string;
   /** Office reference for the decision, e.g. DC/REL/2026/0027. Required. */
   referenceNo: string;
+  /**
+   * `encodeBasis(decisionBasis(…))` captured when the approver opened the case. The command recomputes it and
+   * rejects the decision if evidence, reviews, clearances, holds or case state changed in the meantime.
+   */
+  basis: string;
 }
 export interface AssignCaseInput {
   caseId: string;
@@ -144,8 +164,20 @@ export interface RenewInstrumentInput {
   issueDate: ISODate;
   maturityDate: ISODate;
   bankName?: string;
-  /** Receipt of the renewed instrument (Annexure-2). */
+  /** Receipt of the replacement instrument. */
   receipt?: Attachment;
+}
+export interface AmendReplacementInput {
+  successorId: string;
+  amountPaise: Paise;
+  issueDate: ISODate;
+  maturityDate: ISODate;
+  /** A new receipt is required: amended values need their own evidence version. */
+  receipt: Attachment;
+  note: string;
+}
+export interface RequestBankConfirmationInput {
+  instrumentId: string;
 }
 
 interface DemoState {
@@ -172,6 +204,8 @@ interface DemoState {
   markReadyForDecision: (input: MarkReadyInput) => Promise<ActionResult>;
   requestClearances: (input: RequestClearancesInput) => Promise<ActionResult>;
   respondToCorrection: (input: RespondToCorrectionInput) => Promise<ActionResult>;
+  amendReplacement: (input: AmendReplacementInput) => Promise<ActionResult>;
+  requestBankConfirmation: (input: RequestBankConfirmationInput) => Promise<ActionResult>;
   resetDemo: () => Promise<ActionResult>;
 }
 
@@ -226,13 +260,14 @@ function verifyInstrument(d: DemoData, inst: FinancialInstrument, actorId: strin
   moveInstrument(d, inst, "active", "activate", actorId, now);
 }
 
-/** Re-derives an obligation's status from the Active instruments that secure it. */
+/**
+ * Re-derives an obligation's status from the cover IN FORCE today (src/lib/coverage.ts): an accepted successor whose
+ * deposit date is still ahead does not count yet, and the replaced instrument it succeeds still does until then.
+ */
 function refreshObligation(d: DemoData, obligationId: string) {
   const ob = d.obligations.find((o) => o.id === obligationId);
   if (!ob || ob.status === "release_in_progress" || ob.status === "discharged") return;
-  const covered = d.instruments
-    .filter((i) => i.obligationId === obligationId && i.status === "active")
-    .reduce((sum, i) => sum + i.amountPaise, 0);
+  const covered = coverOn(d, obligationId, todayIST()).paise;
   const target = covered >= ob.requiredPaise ? "secured" : covered > 0 ? "partially_secured" : "pending";
   if (target !== ob.status && canTransition(obligationMachine, ob.status, target)) ob.status = target;
 }
@@ -311,6 +346,8 @@ function attach(
   now: ISOTimestamp,
 ): DocumentRecord {
   if (!a.fileName.trim()) throw new CommandError("Every attachment needs a file name");
+  // A new document of the same kind for the same instrument is a new evidence version; the old one is kept.
+  const previous = link.instrumentId ? currentDocument(d, link.instrumentId, a.kind) : undefined;
   const doc: DocumentRecord = {
     id: newId("doc"),
     institutionId: link.institutionId,
@@ -323,11 +360,124 @@ function attach(
     status: "uploaded",
     uploadedBy: actorId,
     uploadedAt: now,
+    version: previous ? previous.version + 1 : 1,
+    supersedesDocumentId: previous?.id ?? null,
   };
   d.documents.push(doc);
   const inst = link.instrumentId ? d.instruments.find((i) => i.id === link.instrumentId) : undefined;
   if (a.kind === "fdr_receipt" && inst) simulateExtraction(d, doc, inst);
   return doc;
+}
+
+/** Appends a review record, superseding the current one of the same kind. Nothing is deleted. */
+function addReview(d: DemoData, r: Omit<ReviewRecord, "id" | "createdAt" | "supersededById">, now: ISOTimestamp): ReviewRecord {
+  const prev = currentReview(d, r.instrumentId, r.kind);
+  const rec: ReviewRecord = { ...r, id: newId("rv"), createdAt: now, supersededById: null };
+  if (prev) prev.supersededById = rec.id;
+  d.reviews.push(rec);
+  return rec;
+}
+
+const CONSISTENCY_FIELDS: ExtractionField[] = ["instrument_no", "amount", "issue_date", "maturity_date"];
+
+/** Deterministic: declared values vs the values extracted from the CURRENT receipt version. */
+function runConsistencyCheck(d: DemoData, inst: FinancialInstrument, now: ISOTimestamp): ReviewRecord {
+  const doc = currentDocument(d, inst.id);
+  const base = { instrumentId: inst.id, kind: "consistency_check" as const, source: "DETERMINISTIC" as const, reference: null };
+  if (!doc) {
+    return addReview(d, { ...base, status: "pending", evidenceDocumentId: null, evidenceVersion: null, summary: "No receipt on file to check.", reason: "Upload the receipt so declared values can be compared with it.", recordedBy: null, recordedAt: null }, now);
+  }
+  const declared: Partial<Record<ExtractionField, string>> = {
+    instrument_no: inst.instrumentNo,
+    amount: (inst.amountPaise / 100).toFixed(2),
+    issue_date: inst.issueDate,
+    maturity_date: inst.maturityDate ?? "",
+  };
+  const exts = d.extractions.filter((e) => e.documentId === doc.id);
+  const differing = CONSISTENCY_FIELDS.filter((f) => {
+    const e = exts.find((x) => x.field === f);
+    return !e || (f === "amount" ? Math.round(Number(e.value) * 100) !== inst.amountPaise : e.value.trim() !== declared[f]);
+  });
+  return addReview(
+    d,
+    {
+      ...base,
+      status: differing.length ? "needs_attention" : "complete",
+      evidenceDocumentId: doc.id,
+      evidenceVersion: doc.version,
+      summary: differing.length
+        ? `Declared values differ from receipt v${doc.version}: ${differing.map((f) => f.replace(/_/g, " ")).join(", ")}.`
+        : `Declared instrument no., amount, deposit date and maturity date match receipt v${doc.version}.`,
+      reason: differing.length ? `Differences on receipt v${doc.version} need an officer's review.` : null,
+      recordedBy: "system",
+      recordedAt: now,
+    },
+    now,
+  );
+}
+
+/** A new successor starts with its OWN pending reviews. Nothing is copied from the predecessor. */
+function startSuccessorReviews(d: DemoData, inst: FinancialInstrument, now: ISOTimestamp) {
+  const doc = currentDocument(d, inst.id);
+  const ev = { evidenceDocumentId: doc?.id ?? null, evidenceVersion: doc?.version ?? null };
+  addReview(d, { instrumentId: inst.id, kind: "field_confirmation", status: "pending", ...ev, source: "INSTITUTION", summary: "Awaiting confirmation of the extracted fields.", reason: doc ? `New instrument: the institution must confirm the fields read from its own receipt v${doc.version}.` : "No receipt on file yet.", reference: null, recordedBy: null, recordedAt: null }, now);
+  runConsistencyCheck(d, inst, now);
+  addReview(d, { instrumentId: inst.id, kind: "bank_confirmation", status: "pending", ...ev, source: "SIMULATED", summary: "No bank confirmation yet.", reason: "A replacement needs its own bank confirmation; the original's confirmation does not transfer.", reference: null, recordedBy: null, recordedAt: null }, now);
+}
+
+/** The successor in a renewal case: the instrument whose predecessor is also on the case. */
+function renewalPair(d: DemoData, c: VerificationCase): { pred: FinancialInstrument; succ: FinancialInstrument } | null {
+  const insts = d.instruments.filter((i) => c.instrumentIds.includes(i.id));
+  const succ = insts.find((i) => i.predecessorInstrumentId && c.instrumentIds.includes(i.predecessorInstrumentId));
+  const pred = succ && insts.find((i) => i.id === succ.predecessorInstrumentId);
+  return succ && pred ? { pred, succ } : null;
+}
+
+/** Everything that must hold before a replacement can be marked ready or accepted. */
+function replacementBlockers(d: DemoData, c: VerificationCase): string[] {
+  const pair = renewalPair(d, c);
+  if (!pair) return [];
+  return blockingFindings(replacementImpact(d, pair.pred.id, { id: pair.succ.id })).map((f) => f.title);
+}
+
+/**
+ * A new receipt version for an instrument is a material evidence change. Reopens that instrument's affected
+ * reviews (bound to the new version, with the reason), resets evidence checklist items on its open cases and
+ * sends a ready case back to review. Other instruments' reviews are untouched; recorded decisions are never revoked.
+ * Returns the labels of the reviews that need attention again.
+ */
+function evidenceChanged(d: DemoData, inst: FinancialInstrument, doc: DocumentRecord, what: string, actorId: string, now: ISOTimestamp): string[] {
+  const affected: string[] = [];
+  if (d.reviews.some((r) => r.instrumentId === inst.id)) {
+    for (const kind of REVIEW_KINDS) {
+      const label = REVIEW_KIND_LABELS[kind];
+      if (kind === "consistency_check") {
+        runConsistencyCheck(d, inst, now);
+      } else {
+        const prev = currentReview(d, inst.id, kind);
+        const reason = prev?.status === "complete"
+          ? `Evidence changed: ${what}. The earlier result concerned receipt v${prev.evidenceVersion} and no longer applies to the current version.`
+          : `Evidence changed: ${what}. Needed for the current version.`;
+        addReview(d, { instrumentId: inst.id, kind, status: "pending", evidenceDocumentId: doc.id, evidenceVersion: doc.version, source: kind === "bank_confirmation" ? "SIMULATED" : "INSTITUTION", summary: `Awaiting ${label.toLowerCase()} for receipt v${doc.version}.`, reason, reference: null, recordedBy: null, recordedAt: null }, now);
+      }
+      affected.push(label);
+    }
+  }
+  for (const c of d.cases.filter((x) => x.type !== "release" && x.instrumentIds.includes(inst.id) && !["approved", "rejected", "closed"].includes(x.status))) {
+    for (const item of d.checklistItems.filter((i) => i.caseId === c.id && EVIDENCE_ITEMS.has(i.requirementId) && i.status !== "pending")) {
+      item.status = "pending";
+      item.note = `Evidence changed (${what}); re-check required.`;
+      item.checkedBy = null;
+      item.checkedAt = null;
+    }
+    // Recalculate readiness: a ready case goes back to review.
+    if (c.status === "ready_for_decision" || c.status === "awaiting_institution") moveCase(d, c, "in_review", "evidenceChanged", actorId, now);
+    else {
+      c.version += 1;
+      c.updatedAt = now;
+    }
+  }
+  return affected;
 }
 
 interface Effect {
@@ -355,11 +505,17 @@ const AUDIT_ACTION: Record<Action, string> = {
   markReadyForDecision: "case.ready_for_decision",
   requestClearances: "clearances.requested",
   respondToCorrection: "correction.submitted",
+  amendReplacement: "instrument.replacement_amended",
+  requestBankConfirmation: "review.bank_confirmed",
   resetDemo: "demo.reset",
 };
 
 /** Clause 6.46 items satisfied by recorded clearances rather than by a manual check. */
 const CLEARANCE_BACKED: ReadonlySet<string> = new Set(["req-646-05", "req-646-06"]);
+/** Replacement item satisfied only by a recorded bank confirmation on the current evidence version. */
+const REVIEW_BACKED: ReadonlySet<string> = new Set(["req-re-02"]);
+/** Replacement checklist items that concern the successor's receipt and must be re-checked when it changes. */
+const EVIDENCE_ITEMS: ReadonlySet<string> = new Set(["req-re-01", "req-re-02"]);
 /** In production a supervisor assigns clearances; the demo has a single clearance officer. */
 const DEFAULT_CLEARANCE_OFFICER = "u-co";
 
@@ -485,7 +641,8 @@ export const useDemoStore = create<DemoState>()(
               for (const inst of insts) moveInstrument(d, inst, "release_requested", "submitReleaseRequest", s.userId, now);
               const ob = must(d.obligations.find((o) => o.id === obligationId), "Obligation");
               if (canTransition(obligationMachine, ob.status, "release_in_progress")) ob.status = "release_in_progress";
-              for (const department of CLEARANCE_DEPARTMENTS) {
+              // Clearances as applicable, then the NOC (FDR/RPGF) and/or Council sanction (RTGS) for these instruments.
+              for (const department of clearanceDepartmentsFor(insts.map((i) => i.type))) {
                 // Not requested until an officer reaches the clearance stage (brief §7.3–7.4).
                 d.clearances.push({ id: newId("clr"), releaseRequestId: rrId, department, source: "SIMULATED", status: "not_requested", reference: null, remarks: null, assignedTo: null, requestedAt: null, recordedBy: null, recordedAt: null });
               }
@@ -509,8 +666,19 @@ export const useDemoStore = create<DemoState>()(
                 const inst = must(d.instruments.find((i) => i.id === input.instrumentId), "Instrument");
                 if (inst.institutionId !== input.institutionId) throw new CommandError("Instrument belongs to another institution");
               }
-              const { id } = attach(d, input, { institutionId: input.institutionId, instrumentId: input.instrumentId ?? null, caseId: input.caseId ?? null }, s.userId, now);
-              return { entityType: "document", entityId: id, institutionId: input.institutionId, summary: `Uploaded ${input.fileName}`, payload: { kind: input.kind, sizeBytes: input.sizeBytes } };
+              const doc = attach(d, input, { institutionId: input.institutionId, instrumentId: input.instrumentId ?? null, caseId: input.caseId ?? null }, s.userId, now);
+              const inst = input.instrumentId ? d.instruments.find((i) => i.id === input.instrumentId) : undefined;
+              let reopened: string[] = [];
+              if (inst && doc.kind === "fdr_receipt" && doc.supersedesDocumentId) {
+                reopened = evidenceChanged(d, inst, doc, `receipt v${doc.version} uploaded, replacing v${doc.version - 1}`, s.userId, now);
+              }
+              return {
+                entityType: "document",
+                entityId: doc.id,
+                institutionId: input.institutionId,
+                summary: `Uploaded ${input.fileName}${doc.version > 1 ? ` (v${doc.version})` : ""}${reopened.length ? `; reviews reopened: ${reopened.join(", ")}` : ""}`,
+                payload: { kind: input.kind, sizeBytes: input.sizeBytes, version: doc.version, reopened: reopened.length },
+              };
             },
           ),
 
@@ -529,6 +697,11 @@ export const useDemoStore = create<DemoState>()(
               ext.confirmedAt = now;
               if (d.extractions.filter((e) => e.documentId === doc.id).every((e) => e.confirmedAt) && doc.status === "extracted") {
                 doc.status = "confirmed";
+                // Binds the confirmation to this instrument and this evidence version only.
+                const inst = doc.instrumentId ? d.instruments.find((i) => i.id === doc.instrumentId) : undefined;
+                if (inst && doc.kind === "fdr_receipt" && currentDocument(d, inst.id)?.id === doc.id) {
+                  addReview(d, { instrumentId: inst.id, kind: "field_confirmation", status: "complete", evidenceDocumentId: doc.id, evidenceVersion: doc.version, source: "INSTITUTION", summary: `All extracted fields on receipt v${doc.version} confirmed by ${s.name} (${ROLE_LABELS[s.role]}).`, reason: null, reference: null, recordedBy: s.userId, recordedAt: now }, now);
+                }
               }
               return { entityType: "extraction", entityId: ext.id, institutionId: doc.institutionId, summary: `Confirmed ${ext.field.replace(/_/g, " ")} on ${doc.fileName}`, payload: { field: ext.field, value: ext.value, confidence: ext.confidence } };
             },
@@ -597,6 +770,11 @@ export const useDemoStore = create<DemoState>()(
               // Brief §7.4: Cleared needs a reference; every other outcome needs a reason.
               if (input.outcome === "cleared" && !reference) throw new CommandError("A clearance reference is required");
               if (input.outcome !== "cleared" && !remarks) throw new CommandError("A reason is required for this outcome");
+              // Clause 6.46: the Approval Bureau NOC (FDR/RPGF) or Council sanction (RTGS) follows the clearances.
+              if (isFinalAuthority(clr.department) && input.outcome === "cleared") {
+                const outstanding = d.clearances.filter((x) => x.releaseRequestId === rr.id && PRE_NOC_CLEARANCES.includes(x.department) && !["cleared", "not_applicable"].includes(x.status));
+                if (outstanding.length) throw new CommandError(`The ${CLEARANCE_DEPARTMENT_LABELS[clr.department]} follows the clearances; still outstanding: ${outstanding.map((x) => CLEARANCE_DEPARTMENT_LABELS[x.department]).join(", ")}`);
+              }
               assertTransition("clearance", clearanceMachine, clr.status, input.outcome);
               clr.status = input.outcome;
               clr.reference = reference || null;
@@ -604,11 +782,11 @@ export const useDemoStore = create<DemoState>()(
               clr.recordedBy = s.userId;
               clr.recordedAt = now;
 
-              // Tick the Clause 6.46 item the clearances evidence: 6.46-05 (PGRC, Vigilance and other
-              // clearances) and 6.46-06 (Approval Bureau NOC).
+              // Tick the Clause 6.46 item the clearances evidence: 6.46-05 (PGRC, Vigilance Cell and other
+              // applicable clearances) and 6.46-06 (Approval Bureau NOC for FDR/RPGF / Council sanction for RTGS).
               const all = d.clearances.filter((x) => x.releaseRequestId === rr.id);
               const done = (deps: string[]) => all.filter((x) => deps.includes(x.department)).every((x) => x.status === "cleared" || x.status === "not_applicable");
-              const reqFor: Record<string, ClearanceDepartment[]> = { "req-646-05": ["pgrc", "vigilance_cell", "finance"], "req-646-06": ["approval_bureau"] };
+              const reqFor: Record<string, ClearanceDepartment[]> = { "req-646-05": PRE_NOC_CLEARANCES, "req-646-06": FINAL_AUTHORITIES };
               for (const item of d.checklistItems.filter((i) => i.caseId === rr.caseId && reqFor[i.requirementId])) {
                 if (item.status === "pending" && done(reqFor[item.requirementId])) {
                   item.status = "satisfied";
@@ -638,12 +816,28 @@ export const useDemoStore = create<DemoState>()(
             (d) => d.cases.find((c) => c.id === input.caseId)?.institutionId,
             (d, now, s) => {
               const c = must(d.cases.find((x) => x.id === input.caseId), "Case");
+              // Stale-transition guard: the decision must rest on the state the approver actually reviewed.
+              const changed = basisChanges(input.basis ?? "", decisionBasis(d, c.id));
+              if (changed.length) {
+                throw new CommandError(`This case changed after you opened it (${changed.join(", ")}). Review the current state, then record the decision.`);
+              }
               const reason = input.reason.trim();
               const referenceNo = input.referenceNo.trim();
               if (!reason) throw new CommandError("A reason is required for every decision");
               if (!referenceNo) throw new CommandError("A reference number is required for every decision");
               const blocking = d.findings.filter((f) => f.caseId === c.id && f.status !== "resolved" && f.severity === "critical");
               if (input.decision === "approved" && blocking.length > 0) throw new CommandError(`${blocking.length} critical finding(s) are unresolved`);
+              if (input.decision === "approved") {
+                // Re-checked at decision time, not just when the case was marked ready.
+                const held = d.instruments.filter((i) => c.instrumentIds.includes(i.id) && i.status === "on_hold");
+                if (held.length) throw new CommandError(`${held.map((i) => i.instrumentNo).join(", ")} is on hold`);
+                if (c.type === "release") {
+                  const missing = d.clearances.filter((x) => x.releaseRequestId === c.releaseRequestId && !["cleared", "not_applicable"].includes(x.status));
+                  if (missing.length) throw new CommandError(`Required clearances are not recorded: ${missing.map((x) => CLEARANCE_DEPARTMENT_LABELS[x.department]).join(", ")}`);
+                }
+                const impactBlockers = replacementBlockers(d, c);
+                if (impactBlockers.length) throw new CommandError(`Replacement impact is not resolved: ${impactBlockers.join("; ")}`);
+              }
               moveCase(d, c, input.decision, "recordDecision", s.userId, now);
               c.decision = { outcome: input.decision, reason, referenceNo, decidedBy: s.userId, decidedAt: now };
               const insts = d.instruments.filter((i) => c.instrumentIds.includes(i.id));
@@ -671,8 +865,9 @@ export const useDemoStore = create<DemoState>()(
                   verifyInstrument(d, inst, s.userId, now);
                   const pred = d.instruments.find((p) => p.id === inst.predecessorInstrumentId);
                   if (c.type === "renewal" && pred && pred.status === "active") {
-                    moveInstrument(d, pred, "replaced", "recordDecision", s.userId, now);
-                    d.renewals.push({ id: newId("rn"), institutionId: inst.institutionId, predecessorInstrumentId: pred.id, successorInstrumentId: inst.id, renewedAt: now, recordedBy: s.userId });
+                    // Acceptance, not submission, is what replaces the predecessor; its history stays intact.
+                    moveInstrument(d, pred, "replaced", "acceptReplacement", s.userId, now);
+                    d.renewals.push({ id: newId("rn"), institutionId: inst.institutionId, predecessorInstrumentId: pred.id, successorInstrumentId: inst.id, renewedAt: now, effectiveFrom: inst.issueDate, caseId: c.id, recordedBy: s.userId });
                   }
                 }
               } else {
@@ -696,7 +891,9 @@ export const useDemoStore = create<DemoState>()(
               if (pred.status !== "active") throw new CommandError(`Only an active instrument can be renewed (this one is ${pred.status})`);
               if (d.instruments.some((i) => i.predecessorInstrumentId === pred.id && i.status !== "rejected")) throw new CommandError("A renewal is already in progress");
               if (!input.instrumentNo.trim()) throw new CommandError("Instrument number is required");
-              if (!Number.isInteger(input.amountPaise) || input.amountPaise < pred.amountPaise) throw new CommandError("Renewal amount must be at least the current amount");
+              // A lower amount is allowed: replacement impact reports whether it leaves an apparent shortfall.
+              if (!Number.isInteger(input.amountPaise) || input.amountPaise <= 0) throw new CommandError("Enter a positive amount");
+              if (!input.issueDate || !input.maturityDate) throw new CommandError("Deposit and maturity dates are required");
               if (input.maturityDate <= input.issueDate) throw new CommandError("Maturity must be after issue date");
               const id = newId("fdr");
               d.instruments.push({
@@ -705,11 +902,21 @@ export const useDemoStore = create<DemoState>()(
                 submittedAt: now, updatedAt: now, version: 1,
               });
               d.workflowEvents.push({ id: newId("wf"), entityType: "instrument", entityId: id, command: "renewInstrument", from: null, to: "submitted", actorId: s.userId, at: now });
-              const c = openCase(d, "renewal", `Renewal of ${pred.instrumentNo}`, pred.institutionId, [pred.id, id], now);
-              addChecklist(d, c.id, "annexure_2");
+              const c = openCase(d, "renewal", `Replacement of ${pred.instrumentNo}`, pred.institutionId, [pred.id, id], now);
+              addChecklist(d, c.id, "replacement_evidence");
               if (input.receipt) attach(d, { ...input.receipt, kind: "fdr_receipt" }, { institutionId: pred.institutionId, instrumentId: id, caseId: c.id }, s.userId, now);
-              notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "info", title: `Renewal submitted for ${pred.instrumentNo}`, body: `Successor ${input.instrumentNo.trim()} awaits verification (${c.ref}).`, href: "/official/cases" }, now);
-              return { entityType: "instrument", entityId: id, institutionId: pred.institutionId, summary: `Submitted renewal ${input.instrumentNo.trim()} for ${pred.instrumentNo}`, payload: { predecessor: pred.id, amountPaise: input.amountPaise } };
+              startSuccessorReviews(d, must(d.instruments.find((i) => i.id === id), "Successor"), now);
+              const impact = replacementImpact(d, pred.id, { id });
+              const headline = blockingFindings(impact).filter((f) => f.level === "attention").map((f) => f.title);
+              notify(d, { recipientRole: "processing_officer", institutionId: null, severity: headline.length ? "warning" : "info", title: `Replacement submitted for ${pred.instrumentNo}`, body: `Successor ${input.instrumentNo.trim()} (${c.ref}). ${headline.length ? `Replacement impact: ${headline.join("; ")}.` : impact.overallLabel + "."}`, href: `/official/cases/${c.id}` }, now);
+              return {
+                entityType: "instrument",
+                entityId: id,
+                institutionId: pred.institutionId,
+                summary: `Submitted replacement ${input.instrumentNo.trim()} for ${pred.instrumentNo} (${formatINR(input.amountPaise)}). Impact: ${headline.length ? headline.join("; ") : impact.overallLabel}`,
+                payload: { predecessor: pred.id, amountPaise: input.amountPaise, shortfallPaise: impact.shortfallPaise, gapDays: impact.gapDays, impact: impact.overall },
+                resultId: id,
+              };
             },
           ),
 
@@ -777,6 +984,7 @@ export const useDemoStore = create<DemoState>()(
               const c = must(d.cases.find((x) => x.id === item.caseId), "Case");
               const req = must(d.checklistRequirements.find((r) => r.id === item.requirementId), "Requirement");
               if (CLEARANCE_BACKED.has(req.id)) throw new CommandError("This item is satisfied by recorded clearances, not manually");
+              if (REVIEW_BACKED.has(req.id)) throw new CommandError("This item is satisfied by a recorded bank confirmation on the current receipt, not manually");
               if (["approved", "rejected", "closed"].includes(c.status)) throw new CommandError(`Case is ${c.status}`);
               if (item.status === "satisfied") throw new CommandError("Item already satisfied");
               const note = input.note?.trim() ?? "";
@@ -803,6 +1011,8 @@ export const useDemoStore = create<DemoState>()(
               if (!recommendation) throw new CommandError("Add a recommendation for the approver");
               const blocking = d.findings.filter((f) => f.caseId === c.id && f.status !== "resolved" && f.severity === "critical");
               if (blocking.length) throw new CommandError(`${blocking.length} critical finding(s) are unresolved`);
+              const impactBlockers = replacementBlockers(d, c);
+              if (impactBlockers.length) throw new CommandError(`Replacement impact needs attention: ${impactBlockers.join("; ")}`);
               const open = d.checklistItems.filter((i) => i.caseId === c.id && !["satisfied", "not_applicable"].includes(i.status));
               if (open.length) throw new CommandError(`${open.length} checklist item(s) are not satisfied`);
               if (c.status === "open") moveCase(d, c, "in_review", "startReview", s.userId, now);
@@ -859,11 +1069,104 @@ export const useDemoStore = create<DemoState>()(
               const primary = c.instrumentIds[c.instrumentIds.length - 1] ?? null;
               for (const a of input.attachments) attach(d, a, { institutionId: c.institutionId, instrumentId: primary, caseId: c.id }, s.userId, now);
               moveCase(d, c, "in_review", "respondToCorrection", s.userId, now);
+              for (const doc of d.documents.filter((x) => x.caseId === c.id && x.uploadedAt === now && x.kind === "fdr_receipt" && x.supersedesDocumentId)) {
+                const inst = d.instruments.find((i) => i.id === doc.instrumentId);
+                if (inst) evidenceChanged(d, inst, doc, `corrected receipt v${doc.version} uploaded`, s.userId, now);
+              }
               for (const inst of d.instruments.filter((i) => c.instrumentIds.includes(i.id) && i.status === "needs_correction")) {
                 bringUnderReview(d, inst, s.userId, now);
               }
               notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "info", title: `Correction received on ${c.ref}`, body: message, href: `/official/cases/${c.id}` }, now);
               return { entityType: "case", entityId: c.id, institutionId: c.institutionId, summary: `Responded to the correction request on ${c.ref}: ${message}`, payload: { documents: input.attachments.length } };
+            },
+          ),
+
+        amendReplacement: (input) =>
+          command(
+            "amendReplacement",
+            (d) => d.instruments.find((i) => i.id === input.successorId)?.institutionId,
+            (d, now, s) => {
+              const inst = must(d.instruments.find((i) => i.id === input.successorId), "Instrument");
+              const pred = must(d.instruments.find((i) => i.id === inst.predecessorInstrumentId), "Original instrument");
+              if (!["submitted", "under_review", "needs_correction"].includes(inst.status)) {
+                throw new CommandError(`${inst.instrumentNo} is ${inst.status.replace(/_/g, " ")}; only a replacement that has not been decided can be amended`);
+              }
+              const c = d.cases.find((x) => x.type === "renewal" && x.instrumentIds.includes(inst.id) && !["approved", "rejected", "closed"].includes(x.status));
+              if (!c) throw new CommandError("No open replacement case for this instrument");
+              const note = input.note.trim();
+              if (!note) throw new CommandError("Explain what changed and why");
+              if (!Number.isInteger(input.amountPaise) || input.amountPaise <= 0) throw new CommandError("Enter a positive amount");
+              if (!input.issueDate || !input.maturityDate || input.maturityDate <= input.issueDate) throw new CommandError("Maturity must be after the deposit date");
+              if (!input.receipt?.fileName?.trim()) throw new CommandError("Attach the receipt that supports the amended values");
+
+              const prevDoc = currentDocument(d, inst.id);
+              const changes = [
+                input.amountPaise !== inst.amountPaise && `amount ${formatINR(inst.amountPaise)} → ${formatINR(input.amountPaise)}`,
+                input.issueDate !== inst.issueDate && `deposit date ${inst.issueDate} → ${input.issueDate}`,
+                input.maturityDate !== inst.maturityDate && `maturity date ${inst.maturityDate} → ${input.maturityDate}`,
+              ].filter((x): x is string => !!x);
+              // History is never overwritten: the earlier declaration is kept on the instrument.
+              inst.declarationHistory = [
+                ...(inst.declarationHistory ?? []),
+                { version: inst.version, instrumentNo: inst.instrumentNo, amountPaise: inst.amountPaise, issueDate: inst.issueDate, maturityDate: inst.maturityDate, receiptDocumentId: prevDoc?.id ?? null, replacedAt: now, replacedBy: s.userId, note },
+              ];
+              inst.amountPaise = input.amountPaise;
+              inst.issueDate = input.issueDate;
+              inst.maturityDate = input.maturityDate;
+              inst.version += 1;
+              inst.updatedAt = now;
+              const doc = attach(d, { ...input.receipt, kind: "fdr_receipt" }, { institutionId: inst.institutionId, instrumentId: inst.id, caseId: c.id }, s.userId, now);
+              const what = `receipt v${doc.version} replaced v${prevDoc?.version ?? 0}${changes.length ? ` (${changes.join("; ")})` : ""}`;
+
+              // Affected reviews: only this successor's. The original's reviews and decision history are untouched.
+              const affected = evidenceChanged(d, inst, doc, what, s.userId, now);
+              if (inst.status === "needs_correction") bringUnderReview(d, inst, s.userId, now);
+              const impact = replacementImpact(d, pred.id, { id: inst.id });
+              notify(d, { recipientRole: "processing_officer", institutionId: null, severity: "warning", title: `Replacement evidence changed on ${c.ref}`, body: `${inst.instrumentNo}: ${what}. ${affected.length} review(s) need attention again. ${impact.overallLabel}.`, href: `/official/cases/${c.id}` }, now);
+              return {
+                entityType: "instrument",
+                entityId: inst.id,
+                institutionId: inst.institutionId,
+                summary: `Amended replacement ${inst.instrumentNo}: ${what}. Reviews reopened: ${affected.join(", ")}. Reason: ${note}`,
+                payload: { changes: changes.join("; "), evidenceVersion: doc.version, reopened: affected.length, shortfallPaise: impact.shortfallPaise, gapDays: impact.gapDays },
+              };
+            },
+          ),
+
+        requestBankConfirmation: (input) =>
+          command(
+            "requestBankConfirmation",
+            (d) => d.instruments.find((i) => i.id === input.instrumentId)?.institutionId,
+            (d, now, s) => {
+              const inst = must(d.instruments.find((i) => i.id === input.instrumentId), "Instrument");
+              if (!["submitted", "under_review", "needs_correction"].includes(inst.status)) throw new CommandError(`${inst.instrumentNo} is ${inst.status.replace(/_/g, " ")}; bank confirmation is requested while it is under review`);
+              const doc = currentDocument(d, inst.id);
+              if (!doc) throw new CommandError("No receipt on file: there is nothing for the bank to confirm");
+              if (isCurrentAndComplete(d, inst.id, "bank_confirmation")) throw new CommandError(`Bank confirmation already recorded for receipt v${doc.version}`);
+              // SIMULATED adapter: deterministic reference; it echoes the declared details for the current receipt version.
+              const bankCode = inst.instrumentNo.split("/")[0] || "BANK";
+              const reference = `SIM-${bankCode}/CNF/${todayIST().slice(0, 4)}/${String(d.reviews.filter((r) => r.kind === "bank_confirmation").length + 1).padStart(4, "0")}`;
+              const rv = addReview(d, {
+                instrumentId: inst.id, kind: "bank_confirmation", status: "complete", evidenceDocumentId: doc.id, evidenceVersion: doc.version, source: "SIMULATED",
+                summary: `SIMULATED bank response confirms instrument no. ${inst.instrumentNo}, ${formatINR(inst.amountPaise)}, deposit ${inst.issueDate}, maturity ${inst.maturityDate ?? "—"} and lien holder for receipt v${doc.version}.`,
+                reason: null, reference, recordedBy: s.userId, recordedAt: now,
+              }, now);
+              for (const c of d.cases.filter((x) => x.type === "renewal" && x.instrumentIds.includes(inst.id) && !["approved", "rejected", "closed"].includes(x.status))) {
+                for (const item of d.checklistItems.filter((i) => i.caseId === c.id && REVIEW_BACKED.has(i.requirementId))) {
+                  item.status = "satisfied";
+                  item.evidenceDocumentId = doc.id;
+                  item.note = `Bank confirmation ${reference} (SIMULATED) for receipt v${doc.version}`;
+                  item.checkedBy = s.userId;
+                  item.checkedAt = now;
+                }
+                if (c.status === "open") moveCase(d, c, "in_review", "requestBankConfirmation", s.userId, now);
+                else {
+                  c.version += 1;
+                  c.updatedAt = now;
+                }
+              }
+              if (inst.status === "submitted") bringUnderReview(d, inst, s.userId, now);
+              return { entityType: "review", entityId: rv.id, institutionId: inst.institutionId, summary: `Bank confirmation recorded for ${inst.instrumentNo} receipt v${doc.version} (SIMULATED source, ref. ${reference})`, payload: { reference, evidenceVersion: doc.version, instrument: inst.id } };
             },
           ),
 
@@ -892,9 +1195,9 @@ export const useDemoStore = create<DemoState>()(
       };
     },
     {
-      name: "fdr-sentinel-demo",
-      // v4: finding resolutions and checklist notes. Older persisted data is discarded and reseeded.
-      version: 4,
+      name: DEMO_STORAGE_KEY,
+      // v5: reviews, evidence versions and replacement impact. Older persisted data is discarded and reseeded.
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ data: s.data, session: s.session }),
       // Rehydrated manually by <DemoProvider> so server and first client render match.

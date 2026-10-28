@@ -1,6 +1,6 @@
 # Architecture — demo layer vs production target
 
-FDR Sentinel is a **one-day, frontend-only build**. What is deployed on Vercel is the **demo layer**.
+Deposit Docket (formerly FDR Sentinel) is a **frontend-only prototype**. What is deployed on Vercel is the **demo layer**.
 The **production target** is the design in `docs/brief.md` §5–6. Both share one domain model.
 
 - **Demo layer (deployed).** Next.js 15 static/client rendering. Typed seed data in `src/data/`, a
@@ -36,7 +36,7 @@ before it.
 
 | Concern | Demo layer | Production target |
 |---|---|---|
-| Data store | Zustand + `localStorage` (`fdr-sentinel-demo`) | PostgreSQL |
+| Data store | Zustand + `localStorage` (`deposit-docket-demo`); tabs of one browser share records via `storage` events | PostgreSQL |
 | Tables | One typed array per table (`src/data/seed.ts → DemoData`) | Same tables: UUID PKs, FKs, check constraints, indexes on `institution_id`, `status`, `maturity_date`, `submitted_at` |
 | Identity | `/enter` role cards set a session; no password | OIDC sign-in |
 | Authorisation | `can(role, action, ctx)` before every command; route gating in `PortalShell` | Same check in every endpoint, mirrored by RLS |
@@ -48,6 +48,9 @@ before it.
 | Maturity scan | Seeded `jobs` rows; maturity status derived on read | Scheduled job → notifications |
 | Documents / OCR | HTML/SVG replicas with known field regions; precomputed extractions (`source: PRECOMPUTED`) | OCR workers produce extractions with confidence + bounding boxes |
 | Bank / department systems | Mock adapters, every record tagged `SIMULATED` | Typed adapters behind the same interface |
+| Reviews & evidence versions | `reviews` array bound to instrument + document version; superseded, never deleted | `reviews` table with FK to `documents(id)` and a partial unique index on the current review per (instrument, kind) |
+| Replacement impact | Pure function `replacementImpact()` (`src/lib/replacement-impact.ts`) | Same function in the API; shown to institution and official |
+| Stale-decision guard | `decisionBasis()` captured on open, recomputed inside `recordDecision` | Optimistic concurrency: version columns checked in the decision transaction |
 
 ## Demo-data lifecycle
 
@@ -59,6 +62,11 @@ before it.
 - The persisted state is versioned; a version bump discards old data instead of migrating it.
 
 ## What the demo layer cannot prove
+
+- Tabs of the same browser share records through `localStorage`; separate browsers or devices do not. The
+  cross-role story is one browser's local state, not independent sessions on a shared server.
+- The stale-decision and affected-review controls are enforced in the command layer and covered by tests, but
+  they run in the browser: prototype controls, not server-side enforcement.
 
 - Client-side `can()` is a correctness check, not a security boundary — anyone can edit `localStorage`.
   In production the boundary is the server and RLS.

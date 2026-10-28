@@ -1,5 +1,57 @@
 # Implementation status
 
+## Deposit Docket upgrade ✅ (branch `ccr-a039f13a-829e6f`, PR to `main`)
+
+**Done**
+- Renamed to **Deposit Docket**, Security Deposit & FDR Management Portal, Team MAVERICKS (SIH1277). Banner:
+  *PROTOTYPE · SYNTHETIC DATA · NOT CONNECTED TO AICTE OR ANY BANK*. Repository name and domain unchanged.
+- Replacement impact (`src/lib/replacement-impact.ts`) in the replacement form (live draft preview), the
+  institution's instrument page and the official case workbench.
+- Per-instrument, per-evidence-version reviews (`src/lib/reviews.ts`); successor starts with its own pending
+  reviews; affected reviews reopen when a receipt changes; ready cases return to review.
+- New commands: `amendReplacement` (Institution Owner) and `requestBankConfirmation` (Processing Officer,
+  SIMULATED). `recordDecision` requires a decision basis and rejects stale transitions; approval re-checks
+  holds, clearances and replacement impact.
+- Policy corrections: no Annexure-1/2 labels on generic checklists; no universal Finance clearance; NOC after
+  clearances; reminder windows labelled product settings; "unsecured" replaced with "matured without a
+  recorded successor — review required".
+- Judge scenario seed (`ob-kit-lab`, `fdr-kit-07`), `/enter` demo guide and "Start judge scenario" restart.
+- Fixed a pre-existing hydration mismatch on `/` under reduced motion (lifecycle hint text).
+
+**Verified**
+- `pnpm test` 48/48 at the first commit (30 existing, 18 new), lint, typecheck, build clean. Mutation checks: disabling the stale
+  guard fails 2 tests; double-counting the original fails 3.
+- Playwright, one browser: full judge scenario across Institution → Officer → Institution → Officer → Approver →
+  Institution; two-tab stale-decision rejection; changed pages at 375/1440 px, light/dark, reduced motion: no
+  horizontal overflow, no console errors.
+
+**Pre-merge corrections (second commit)**
+- Fixed a date-coverage defect: a successor that started before the handover but matured before it was reported
+  as "No apparent date gap" and its amount was counted. Amounts are now compared on one evaluation day
+  (handover, or the successor's deposit date if later), counting only instruments in force that day; such a
+  successor is flagged and blocks readiness and approval. Gap cover counts only instruments in force on every
+  gap day. Later maturities of supporting instruments are noted, not assessed (A7).
+- Clause 6.46 distinctions: PGRC, Vigilance Cell and open-ended "Other applicable cells / bureaus" (each may be
+  Not applicable with a reason); then separate Approval Bureau NOC (FDR/RPGF) and Council sanction order (RTGS).
+  Default applicability labelled demo configuration. Removed a leftover "Finance" mention on the institution
+  release page.
+- `pnpm test` 57/57 (9 more: date-coverage regressions incl. readiness/decision path; other cells; NOC vs
+  Council sanction; provenance).
+
+**Acceptance vs cover in force (third commit)**
+- Totals and obligation status were derived from status alone. Between approval and a future effective date, the
+  accepted successor counted before it was in force and the replaced original was ignored while still in force.
+  Replacement-impact for another instrument on the same obligation could then report an artificial shortfall.
+- Added `src/lib/coverage.ts` (date-based cover periods). Obligation status, "cover in force today" totals and
+  replacement impact now use it. Badges read *Replaced · in force until …* / *Accepted · cover starts …*, and the
+  recorded effective date is shown on both instruments, the lineage chain and the case.
+- Judge-scenario resolution now deposits on the handover date (day after the original matures).
+- `pnpm test` 60/60 (3 new: approval before a future handover).
+
+**Not done / limits**
+- Browser-only: no server, no shared database; controls are prototype controls, not server-side security.
+- Lighthouse not re-run after this change.
+
 Build order: 1 → 2 → **4** → 3 → 5 (Official Portal before Institution Portal, by request).
 
 ## Phase 5 — Polish and release ✅ (deployment pending)

@@ -24,7 +24,7 @@ const NEXT: Record<ReleaseStatus, string> = {
   submitted: "A processing officer will check that the Clause 6.46 documents are complete.",
   completeness_review: "A processing officer is checking that the Clause 6.46 documents are complete.",
   in_verification: "Your documents are being verified.",
-  awaiting_clearances: "Waiting on clearances from PGRC, Vigilance Cell, Finance and the Approval Bureau.",
+  awaiting_clearances: "Waiting on clearances from PGRC, the Vigilance Cell and any other applicable cell, then the Approval Bureau NOC (FDR/RPGF) or Council sanction (RTGS).",
   awaiting_institution_response: "The officer needs more information from you.",
   ready_for_decision: "Every clearance is recorded. The request is with the Approver for an authorised decision — this is not yet an approval.",
   approved: "Approved. The decision and its reference are recorded below. The system never moves money itself.",
@@ -92,7 +92,7 @@ export default function InstitutionReleaseTimelinePage() {
           <CaseTimeline events={events} />
         </div>
         <div className="min-w-0 space-y-6 lg:col-span-5">
-          <DecisionPanel caseItem={c} suggestedRef="" />
+          <DecisionPanel caseItem={c} suggestedRef="" basis="" />
           <ClearancesPanel data={d} releaseRequestId={rr.id} />
           <ChecklistPanel data={d} caseItem={c} />
         </div>

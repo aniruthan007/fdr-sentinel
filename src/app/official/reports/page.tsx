@@ -8,6 +8,7 @@ import { MoneyText } from "@/components/money-text";
 import { PortalPage, Section } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
 import { institutionColumns } from "@/components/tables/columns";
+import { coverInForce } from "@/lib/coverage";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { todayIST } from "@/lib/dates";
 import { isReleaseApproved } from "@/lib/selectors";
@@ -17,9 +18,10 @@ import { useDemoData, useToday } from "@/store/hooks";
 export default function ReportsPage() {
   const d = useDemoData();
   const today = useToday();
-  const columns = useMemo(() => institutionColumns(d), [d]);
+  const columns = useMemo(() => institutionColumns(d, today), [d, today]);
   const required = d.obligations.filter((o) => o.status !== "discharged").reduce((s, o) => s + o.requiredPaise, 0);
-  const covered = d.instruments.filter((i) => i.status === "active").reduce((s, i) => s + i.amountPaise, 0);
+  // Date-based: an accepted successor counts from its effective date; the instrument it replaces counts until then.
+  const covered = coverInForce(d, today);
   const coverage = required ? Math.round((covered / required) * 1000) / 10 : 0;
   const released = d.releaseRequests.filter((r) => isReleaseApproved(d, r) && r.decidedAt);
   const avgDays = released.length
@@ -40,7 +42,7 @@ export default function ReportsPage() {
       status: STATUS_META[instrumentDisplayStatus(i, today)].label,
       predecessor: d.instruments.find((p) => p.id === i.predecessorInstrumentId)?.instrumentNo ?? "",
     }));
-    downloadCsv(`fdr-sentinel-instruments-${todayIST()}.csv`, toCsv(rows));
+    downloadCsv(`deposit-docket-instruments-${todayIST()}.csv`, toCsv(rows));
   }
 
   function exportReleases() {
@@ -58,7 +60,7 @@ export default function ReportsPage() {
         clearances_recorded: `${d.clearances.filter((x) => x.releaseRequestId === r.id && ["cleared", "not_applicable"].includes(x.status)).length}/${d.clearances.filter((x) => x.releaseRequestId === r.id).length}`,
       };
     });
-    downloadCsv(`fdr-sentinel-release-requests-${todayIST()}.csv`, toCsv(rows));
+    downloadCsv(`deposit-docket-release-requests-${todayIST()}.csv`, toCsv(rows));
   }
 
   return (
@@ -77,7 +79,7 @@ export default function ReportsPage() {
       stats={
         <>
           <StatCard label="Coverage" value={`${coverage}%`} hint="Active cover ÷ required" icon={Percent} />
-          <StatCard label="Active cover" value={<MoneyText paise={covered} compact />} icon={Landmark} />
+          <StatCard label="Cover in force today" value={<MoneyText paise={covered} compact />} icon={Landmark} />
           <StatCard label="Approved for release" value={<MoneyText paise={released.reduce((s, r) => s + r.totalPaise, 0)} compact />} hint={`${released.length} request(s)`} icon={Undo2} />
           <StatCard label="Avg. release turnaround" value={avgDays === null ? "—" : `${avgDays} d`} hint="Submission → decision" icon={Timer} />
         </>

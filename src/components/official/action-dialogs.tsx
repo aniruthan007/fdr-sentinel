@@ -225,7 +225,7 @@ export function MarkReadyDialog({ caseId, trigger }: Trigger & { caseId: string 
 // Approver
 // ---------------------------------------------------------------------------------------------
 
-export function DecisionDialog({ caseId, caseRef, suggestedRef, trigger }: Trigger & { caseId: string; caseRef: string; suggestedRef: string }) {
+export function DecisionDialog({ caseId, caseRef, suggestedRef, basis, trigger }: Trigger & { caseId: string; caseRef: string; suggestedRef: string; basis: string }) {
   const recordDecision = useDemoStore((s) => s.recordDecision);
   const [decision, setDecision] = useState<"approved" | "rejected" | null>(null);
   const [reason, setReason] = useState("");
@@ -245,7 +245,7 @@ export function DecisionDialog({ caseId, caseRef, suggestedRef, trigger }: Trigg
         setRef(suggestedRef);
       }}
       canSubmit={!!decision && reason.trim().length > 0 && ref.trim().length > 0}
-      onSubmit={() => recordDecision({ caseId, decision: decision!, reason, referenceNo: ref })}
+      onSubmit={() => recordDecision({ caseId, decision: decision!, reason, referenceNo: ref, basis })}
     >
       <Field label="Decision">
         <ChoiceGroup
@@ -294,7 +294,11 @@ export function ClearanceDialog({ clearance, requestRef, trigger }: Trigger & { 
     <FormDialog
       trigger={trigger}
       title={`${dept} clearance · ${requestRef}`}
-      description="Source is SIMULATED in this prototype. Record the outcome the department gave you."
+      description={
+        clearance.department === "other_applicable"
+          ? "Record which other cell or bureau applies (Cleared, naming it in the remarks with its reference), or why none applies (Not applicable, with a reason). Source is SIMULATED."
+          : "Source is SIMULATED in this prototype. Record the outcome the department gave you."
+      }
       submitLabel="Record clearance"
       successMessage={`${dept} clearance recorded`}
       onOpenChange={(o) => {

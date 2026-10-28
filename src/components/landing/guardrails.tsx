@@ -2,10 +2,10 @@ import { Check, X } from "lucide-react";
 import { LandingSection, Reveal } from "./primitives";
 
 const DOES = [
-  "Extracts fields from receipts and letters, with a confidence score",
+  "Shows fields read from receipts, with a confidence score (precomputed or simulated in this prototype — no live OCR)",
   "Points to the exact page and region each value came from",
   "Compares declared, extracted and on-record values",
-  "Flags differences for an officer to review",
+  "Flags differences, shortfalls and date gaps for an officer to review",
 ];
 
 const NEVER = [

@@ -67,10 +67,10 @@ export function MaturityRadar({ data, today }: { data: DemoData; today: ISODate 
       <div className="grid gap-3 sm:grid-cols-4">
         <div className={cn("rounded-lg border p-4 shadow-soft", overdue.length ? "border-status-danger-border bg-status-danger-bg" : "bg-card")}>
           <p className="flex items-center gap-1.5 text-xs font-medium text-status-danger">
-            <CalendarX2 className="size-3.5" aria-hidden /> Matured, not renewed
+            <CalendarX2 className="size-3.5" aria-hidden /> Matured, no recorded successor
           </p>
           <p className="mt-1 text-2xl font-semibold tabular">{overdue.length}</p>
-          <p className="text-xs text-muted-foreground">{overdue.length ? formatINRCompact(overdue.reduce((s, i) => s + i.amountPaise, 0)) + " unsecured" : "None"}</p>
+          <p className="text-xs text-muted-foreground">{overdue.length ? `${formatINRCompact(overdue.reduce((s, i) => s + i.amountPaise, 0))} · review required` : "None"}</p>
         </div>
         {bands.map((b, i) => (
           <div key={b.label} className="rounded-lg border bg-card p-4 shadow-soft">

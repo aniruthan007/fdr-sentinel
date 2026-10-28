@@ -50,12 +50,12 @@ export default function RenewalsPage() {
         enableSorting: false,
         cell: ({ row: { original: i } }) => {
           const renewing = renewalInProgress(d, i.id);
-          if (renewing) return <span className="text-xs text-muted-foreground">Renewal under review</span>;
+          if (renewing) return <span className="text-xs text-muted-foreground">Replacement under review</span>;
           if (!canRenew) return null;
           const urgent = ["near_maturity", "matured"].includes(instrumentDisplayStatus(i, today));
           return (
             <div className="text-right" onClick={(e) => e.stopPropagation()}>
-              <RenewDialog instrument={i} trigger={<Button size="xs" variant={urgent ? "default" : "outline"} className="gap-1"><RefreshCcw className="size-3" /> Renew</Button>} />
+              <RenewDialog instrument={i} trigger={<Button size="xs" variant={urgent ? "default" : "outline"} className="gap-1"><RefreshCcw className="size-3" /> Renew / replace</Button>} />
             </div>
           );
         },
@@ -70,7 +70,7 @@ export default function RenewalsPage() {
       stats={
         <>
           <StatCard label="Near maturity" value={near} hint="Within 30 days" icon={CalendarClock} tone={near ? "warning" : "default"} />
-          <StatCard label="Matured, not renewed" value={matured} icon={CalendarX2} tone={matured ? "danger" : "default"} />
+          <StatCard label="Matured, no recorded successor" value={matured} hint="Review required" icon={CalendarX2} tone={matured ? "danger" : "default"} />
           <StatCard label="Renewals under review" value={inProgress.length} icon={RefreshCcw} />
           <StatCard label="Renewal chains" value={chains.length} hint="Predecessor ↔ successor links" icon={GitBranch} />
         </>
@@ -102,7 +102,7 @@ export default function RenewalsPage() {
         <div className="space-y-4">
           {chains.map((chain) => (
             <div key={chain[0].id} className="rounded-xl border bg-card p-4 shadow-soft">
-              <LineageChain chain={chain} today={today} hrefFor={hrefFor} />
+              <LineageChain chain={chain} data={d} today={today} hrefFor={hrefFor} />
             </div>
           ))}
           {chains.length === 0 && <p className="text-sm text-muted-foreground">No renewals yet.</p>}

@@ -8,7 +8,7 @@ import { MoneyText } from "@/components/money-text";
 import { PortalPage } from "@/components/portal-page";
 import { StatCard } from "@/components/stat-card";
 import { institutionColumns } from "@/components/tables/columns";
-import { useDemoData } from "@/store/hooks";
+import { useDemoData, useToday } from "@/store/hooks";
 
 /** Supports ?q= deep links from the ⌘K palette. */
 export default function InstitutionsPage() {
@@ -22,7 +22,8 @@ export default function InstitutionsPage() {
 function InstitutionsPageInner() {
   const q = useSearchParams().get("q") ?? "";
   const d = useDemoData();
-  const columns = useMemo(() => institutionColumns(d), [d]);
+  const today = useToday();
+  const columns = useMemo(() => institutionColumns(d, today), [d, today]);
   const required = d.obligations.filter((o) => o.status !== "discharged").reduce((s, o) => s + o.requiredPaise, 0);
 
   return (

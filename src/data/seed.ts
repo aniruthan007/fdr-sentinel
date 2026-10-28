@@ -15,6 +15,7 @@ import type {
   PolicyRule,
   ReleaseRequest,
   RenewalReplacement,
+  ReviewRecord,
   VerificationCase,
   VerificationFinding,
   WorkflowEvent,
@@ -27,6 +28,7 @@ import { INSTITUTIONS } from "./institutions";
 import { buildInstruments, buildObligations } from "./instruments";
 import { buildChecklistRequirements, buildPolicyRules } from "./policy";
 import { buildClearances, buildReleaseRequests, buildRenewals } from "./releases";
+import { buildReviews } from "./reviews";
 
 /** All demo records. One array per table in CLAUDE.md §6. */
 export interface DemoData {
@@ -42,6 +44,8 @@ export interface DemoData {
   releaseRequests: ReleaseRequest[];
   clearances: ClearanceRecord[];
   renewals: RenewalReplacement[];
+  /** Field confirmations, consistency checks and bank confirmations — per instrument and evidence version. */
+  reviews: ReviewRecord[];
   policyRules: PolicyRule[];
   checklistRequirements: ChecklistRequirement[];
   checklistItems: CaseChecklistItem[];
@@ -68,6 +72,7 @@ export async function buildSeed(today: ISODate): Promise<DemoData> {
     releaseRequests: buildReleaseRequests(ctx),
     clearances: buildClearances(ctx),
     renewals: buildRenewals(ctx),
+    reviews: buildReviews(ctx),
     policyRules: buildPolicyRules(ctx),
     checklistRequirements: buildChecklistRequirements(ctx),
     checklistItems: buildChecklistItems(ctx),

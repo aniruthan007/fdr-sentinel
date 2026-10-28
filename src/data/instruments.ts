@@ -28,6 +28,8 @@ const OBLIGATIONS: ObligationRow[] = [
   ["ob-kit-est", "inst-kit", "establishment", 1_25_00_000, "secured", -1100],
   ["ob-kit-int", "inst-kit", "intake_increase", 25_00_000, "pending", -20],
   ["ob-kit-prog", "inst-kit", "new_programme", 15_00_000, "release_in_progress", -510],
+  // Judge scenario: a continuing ₹25 lakh obligation secured by one ₹25 lakh FDR that matures soon.
+  ["ob-kit-lab", "inst-kit", "additional_course", 25_00_000, "secured", -360],
   ["ob-wgce-est", "inst-wgce", "establishment", 1_75_00_000, "partially_secured", -330],
   ["ob-dpip-est", "inst-dpip", "establishment", 1_20_00_000, "partially_secured", -350],
   ["ob-ysm-est", "inst-ysm", "establishment", 60_00_000, "secured", -260],
@@ -49,6 +51,7 @@ export function buildObligations(ctx: SeedContext): DepositObligation[] {
     status,
     createdAt: ctx.t(created, 10),
     sourceRef: OBLIGATION_SOURCE,
+    requirementKnown: true,
   }));
 }
 
@@ -67,7 +70,7 @@ type InstrumentRow = [
 ];
 
 /**
- * 26 instruments. Active maturities are spread over the next ~120 days so the maturity radar
+ * 27 instruments. Active maturities are spread over the next ~120 days so the maturity radar
  * always has something to show. Kaveri's establishment FDR is a three-generation renewal chain.
  */
 const INSTRUMENTS: InstrumentRow[] = [
@@ -78,6 +81,8 @@ const INSTRUMENTS: InstrumentRow[] = [
   ["fdr-kit-04", "ob-kit-est", "FDR", "SUB/TD/2025/0098812", "SUB", 75_00_000, -300, 64, "active", null],
   ["fdr-kit-05", "ob-kit-int", "FDR", "NGB/FDR/2026/7731045", "NGB", 25_00_000, -6, 359, "under_review", null],
   ["fdr-kit-06", "ob-kit-prog", "FDR", "DMB/FD/2024/298850", "DMB", 15_00_000, -500, 95, "release_requested", null],
+  // Judge scenario original — bank-confirmed, maturing in 12 days.
+  ["fdr-kit-07", "ob-kit-lab", "FDR", "SUB/TD/2025/0123456", "SUB", 25_00_000, -353, 12, "active", null],
   // Western Ghats College of Engineering
   ["fdr-wgce-01", "ob-wgce-est", "FDR", "CFB/FD/2026/004417", "CFB", 1_00_00_000, -9, 356, "under_review", null],
   ["fdr-wgce-02", "ob-wgce-est", "FDR", "CFB/FD/2025/003120", "CFB", 50_00_000, -320, 45, "active", null],

@@ -16,6 +16,9 @@ import { CaseTimeline, ChecklistPanel, DecisionPanel, DiscrepancyPanel, Findings
 import { EvidenceViewer } from "@/components/official/evidence-viewer";
 import { Meta, RecordHeader, suggestedDecisionRef } from "@/components/official/record-header";
 import { caseEntityIds } from "@/lib/evidence";
+import { replacementImpact } from "@/lib/replacement-impact";
+import { acceptanceBadgeLabel, coverStanding } from "@/lib/coverage";
+import { ReplacementImpactPanel, ReviewsPanel, StaleBanner, useOpenedBasis } from "@/components/replacement/replacement-impact";
 import { instrumentDisplayStatus } from "@/lib/status";
 import { useCan, useCommand } from "@/hooks/use-command";
 import { useDemoStore } from "@/store/demo-store";
@@ -38,6 +41,8 @@ export default function CaseWorkbenchPage() {
   const canAssign = useCan("assignCase", c?.institutionId);
   const canCorrect = useCan("requestCorrection", c?.institutionId);
   const canMarkReady = useCan("markReadyForDecision", c?.institutionId);
+  // What the official saw when the case was opened; a decision on an outdated view is rejected by the store.
+  const { opened, changes, refresh } = useOpenedBasis(d, c?.id);
 
   // Release cases are reviewed on the release request page.
   useEffect(() => {
@@ -63,9 +68,13 @@ export default function CaseWorkbenchPage() {
   const evidenceIds = new Set(d.checklistItems.filter((i) => i.caseId === c.id).map((i) => i.evidenceDocumentId));
   const documents = d.documents
     .filter((doc) => doc.caseId === c.id || (doc.instrumentId && c.instrumentIds.includes(doc.instrumentId)) || evidenceIds.has(doc.id))
-    .sort((a, b) => (a.kind === "fdr_receipt" ? -1 : b.kind === "fdr_receipt" ? 1 : 0));
+    .sort((a, b) => (a.kind === "fdr_receipt" ? 0 : 1) - (b.kind === "fdr_receipt" ? 0 : 1) || b.version - a.version);
   const openFindings = d.findings.filter((f) => f.caseId === c.id && f.status === "open").length;
   const active = !["approved", "rejected", "closed"].includes(c.status);
+  const acceptedRenewal = d.renewals.find((r) => r.caseId === c.id);
+  const predecessor = primary?.predecessorInstrumentId ? d.instruments.find((i) => i.id === primary.predecessorInstrumentId && c.instrumentIds.includes(i.id)) : undefined;
+  const impact = predecessor && primary ? replacementImpact(d, predecessor.id, { id: primary.id }) : null;
+  const obligationLabel = obligation ? `${OBLIGATION_KIND_LABELS[obligation.kind]} · ${d.institutions.find((i) => i.id === obligation.institutionId)?.shortName ?? ""} · AY ${obligation.academicYear}` : "—";
   const reviewing = ["open", "in_review"].includes(c.status);
 
   return (
@@ -86,7 +95,7 @@ export default function CaseWorkbenchPage() {
         badges={
           <>
             <StatusBadge status={c.status} />
-            {primary && <StatusBadge status={instrumentDisplayStatus(primary, today)} label={`Instrument: ${instrumentDisplayStatus(primary, today).replace(/_/g, " ")}`} />}
+            {primary && <StatusBadge status={instrumentDisplayStatus(primary, today)} label={`Instrument: ${acceptanceBadgeLabel(d, primary, today) ?? instrumentDisplayStatus(primary, today).replace(/_/g, " ")}`} />}
           </>
         }
         actions={
@@ -121,6 +130,11 @@ export default function CaseWorkbenchPage() {
             <Meta label="Opened"><DateText at={c.openedAt} /></Meta>
             <Meta label="Due">{c.dueDate ? <DateText date={c.dueDate} relative /> : "—"}</Meta>
             <Meta label="Maturity">{primary ? <DateText date={primary.maturityDate} /> : "—"}</Meta>
+            {acceptedRenewal && (
+              <Meta label="Replacement effective">
+                <span className="font-medium"><DateText date={acceptedRenewal.effectiveFrom} /></span> · {coverStanding(d, primary!, today).label}
+              </Meta>
+            )}
             <Meta label="Lineage">
               {primary?.predecessorInstrumentId ? (
                 <span className="inline-flex items-center gap-1 font-mono text-[13px]">
@@ -135,13 +149,19 @@ export default function CaseWorkbenchPage() {
         }
       />
 
+      {active && <StaleBanner changes={changes} onRefresh={refresh} institutionId={c.institutionId} />}
+
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="min-w-0 space-y-6 lg:col-span-7">
+          {impact && <ReplacementImpactPanel impact={impact} obligationLabel={obligationLabel} />}
           <EvidenceViewer data={d} documents={documents} instruments={instruments} institutionId={c.institutionId} activeField={activeField} onActiveFieldChange={setActiveField} />
           {primary && <DiscrepancyPanel data={d} caseItem={c} instrument={primary} activeField={activeField} onSelectField={setActiveField} />}
         </div>
         <div className="min-w-0 space-y-6 lg:col-span-5">
-          <DecisionPanel caseItem={c} suggestedRef={suggestedDecisionRef(c.type === "renewal" ? "REN" : "VER", c.ref)} />
+          <DecisionPanel caseItem={c} suggestedRef={suggestedDecisionRef(c.type === "renewal" ? "REN" : "VER", c.ref)} basis={opened} />
+          {primary && (c.type === "renewal" || d.reviews.some((r) => r.instrumentId === primary.id)) && (
+            <ReviewsPanel data={d} original={predecessor ?? null} successor={primary} institutionId={c.institutionId} />
+          )}
           <FindingsPanel data={d} caseItem={c} />
           <ChecklistPanel data={d} caseItem={c} />
           <CaseTimeline events={events} />

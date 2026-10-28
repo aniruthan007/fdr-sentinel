@@ -1,15 +1,39 @@
 import { rupees } from "@/lib/money";
-import type { ClearanceDepartment, ClearanceRecord, ReleaseRequest, RenewalReplacement } from "@/types";
+import type { ClearanceDepartment, ClearanceRecord, InstrumentType, ReleaseRequest, RenewalReplacement } from "@/types";
 import type { SeedContext } from "./context";
 
 export const CLEARANCE_DEPARTMENT_LABELS: Record<ClearanceDepartment, string> = {
   pgrc: "PGRC",
   vigilance_cell: "Vigilance Cell",
-  approval_bureau: "Approval Bureau",
-  finance: "Finance",
+  other_applicable: "Other applicable cells / bureaus",
+  approval_bureau: "Approval Bureau NOC (FDR/RPGF)",
+  council_sanction: "Council sanction order (RTGS)",
 };
 
-export const CLEARANCE_DEPARTMENTS = Object.keys(CLEARANCE_DEPARTMENT_LABELS) as ClearanceDepartment[];
+/**
+ * Clearance outcomes recorded first (brief §3.5: "PGRC, Vigilance Cell and other relevant cells/bureaus, as
+ * applicable"). Not an exhaustive list: `other_applicable` stands for any further cell, and each entry can be recorded
+ * Not applicable with a reason. Requesting all three by default on every release is DEMO CONFIGURATION.
+ */
+export const PRE_NOC_CLEARANCES: ClearanceDepartment[] = ["pgrc", "vigilance_cell", "other_applicable"];
+
+/** Final records after the clearances: NOC for FDR/RPGF, Council sanction for RTGS. Kept as distinct records. */
+export const FINAL_AUTHORITIES: ClearanceDepartment[] = ["approval_bureau", "council_sanction"];
+
+export function isFinalAuthority(dept: ClearanceDepartment): boolean {
+  return FINAL_AUTHORITIES.includes(dept);
+}
+
+/** Departments created for a release, in display order: clearances, then the final record(s) the instruments need. */
+export function clearanceDepartmentsFor(instrumentTypes: InstrumentType[]): ClearanceDepartment[] {
+  const finals: ClearanceDepartment[] = [];
+  if (instrumentTypes.some((t) => t === "FDR" || t === "RPGF")) finals.push("approval_bureau");
+  if (instrumentTypes.some((t) => t === "RTGS")) finals.push("council_sanction");
+  return [...PRE_NOC_CLEARANCES, ...finals];
+}
+
+/** Display order for any set of clearance records. */
+export const CLEARANCE_ORDER: ClearanceDepartment[] = [...PRE_NOC_CLEARANCES, ...FINAL_AUTHORITIES];
 
 export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
   return [
@@ -47,14 +71,14 @@ export function buildReleaseRequests(ctx: SeedContext): ReleaseRequest[] {
 type ClearanceRow = [rr: string, dept: ClearanceDepartment, status: ClearanceRecord["status"], reference: string | null, remarks: string | null, offset: number | null];
 
 const CLEARANCES: ClearanceRow[] = [
-  ["rr-01", "finance", "cleared", "FIN/NDC/2026/0418", "No outstanding dues on record.", -9],
-  ["rr-01", "approval_bureau", "cleared", "AB/NOC/2026/0093", "NOC issued: programme closure recorded for AY 2026-27.", -8],
   ["rr-01", "pgrc", "pending", null, null, null],
   ["rr-01", "vigilance_cell", "further_info_required", null, "Copy of the programme closure order requested.", -7],
-  ["rr-02", "finance", "cleared", "FIN/NDC/2026/0117", "No outstanding dues on record.", -55],
-  ["rr-02", "approval_bureau", "cleared", "AB/NOC/2026/0031", "NOC issued: closure approved.", -52],
+  ["rr-01", "other_applicable", "pending", null, null, null],
+  ["rr-01", "approval_bureau", "pending", null, null, null],
   ["rr-02", "pgrc", "cleared", "PGRC/CLR/2026/0052", "No open grievances.", -48],
   ["rr-02", "vigilance_cell", "cleared", "VIG/CLR/2026/0040", "Nothing adverse on record.", -41],
+  ["rr-02", "other_applicable", "not_applicable", null, "No other cell or bureau applies to this programme closure (determination recorded by the clearance officer).", -40],
+  ["rr-02", "approval_bureau", "cleared", "AB/NOC/2026/0031", "NOC recorded after clearances: closure approved.", -38],
 ];
 
 export function buildClearances(ctx: SeedContext): ClearanceRecord[] {
@@ -82,6 +106,8 @@ export function buildRenewals(ctx: SeedContext): RenewalReplacement[] {
       predecessorInstrumentId: "fdr-kit-01",
       successorInstrumentId: "fdr-kit-02",
       renewedAt: ctx.t(-730, 12, 0),
+      effectiveFrom: ctx.d(-730),
+      caseId: null,
       recordedBy: "u-po",
     },
     {
@@ -90,7 +116,9 @@ export function buildRenewals(ctx: SeedContext): RenewalReplacement[] {
       predecessorInstrumentId: "fdr-kit-02",
       successorInstrumentId: "fdr-kit-03",
       renewedAt: ctx.t(-360, 12, 30),
-      recordedBy: "u-po",
+      effectiveFrom: ctx.d(-365),
+      caseId: "vc-07",
+      recordedBy: "u-ap",
     },
   ];
 }
